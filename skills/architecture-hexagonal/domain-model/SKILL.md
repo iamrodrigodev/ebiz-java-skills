@@ -1,4 +1,4 @@
----
+﻿---
 name: domain-model
 description: Asistente interactivo (wizard) para diseñar Entidades de Dominio Rico (Rich Domain Models) y generar su código Java.
 ---
@@ -92,3 +92,4 @@ public class Usuario {
 - Jamás pongas `@Entity` o heredes de `Serializable` para fines de base de datos.
 - Jamás crees `setEstado(Estado nuevo)` como público; obliga a usar verbos (`activar()`, `suspender()`).
 - Aplica rigurosamente el **Lenguaje Ubicuo** (Ubiquitous Language): Nombra las funciones exactamente como hablan los expertos del negocio. Evita prefijos técnicos o nombres CRUD genéricos.
+

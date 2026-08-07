@@ -1,4 +1,4 @@
----
+﻿---
 name: create-usecase
 description: Guía y ejemplos de código sobre cómo generar la lógica de un Caso de Uso (Application Service).
 ---
@@ -37,7 +37,7 @@ public record ActivarUsuarioCommand(
 ```
 
 ### 2. La Implementación del Caso de Uso (`application/service/ActivarUsuarioService.java`)
-Esta clase **NO** lleva `@Service` ni `@Autowired`. La inyección se hace por constructor y la configuración de beans ocurrirá en infraestructura. Es Java puro.
+Esta clase **NO** lleva `@Service` ni `@Autowired`. La inyección se hace por constructor y la configuración de beans ocurrirá en infrastructure. Es Java puro.
 
 ```java
 package com.empresa.logistica.gestionusuarios.application.service;
@@ -77,3 +77,4 @@ public class ActivarUsuarioService implements ActivarUsuarioUseCase {
 Al revisar o generar este código:
 - Asegúrate de que no exista ningún `import org.springframework.*` en estos archivos.
 - Valida que la lógica de negocio pura (como verificar si el usuario puede activarse) esté encapsulada dentro de la Entidad (ej. `usuario.activar()`), y no expuesta al aire en este Servicio.
+

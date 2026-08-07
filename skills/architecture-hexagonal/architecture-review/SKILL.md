@@ -12,7 +12,7 @@ Este documento sirve como manual estricto tanto para desarrolladores del equipo 
 Al revisar un módulo o funcionalidad, se deben ejecutar los siguientes pasos de forma metódica:
 
 1. **Analizar la Estructura (Vertical Slicing):**
-   - El módulo debe estar dividido obligatoriamente en las carpetas `domain`, `application` e `infraestructura`.
+   - El módulo debe estar dividido obligatoriamente en las carpetas `domain`, `application` e `infrastructure`.
    - Si falta alguna capa o existen carpetas globales fuera de lugar (ej. un paquete `controllers` en la raíz), debe reportarse como error.
 
 2. **Auditar la Capa de Dominio (`domain`):**
@@ -22,10 +22,10 @@ Al revisar un módulo o funcionalidad, se deben ejecutar los siguientes pasos de
 
 3. **Auditar la Capa de Aplicación (`application`):**
    - Revisa las clases en `application/service`.
-   - **Regla Estricta:** Solo pueden importar clases de `application` y `domain`. No pueden importar nada de `infraestructura`.
+   - **Regla Estricta:** Solo pueden importar clases de `application` y `domain`. No pueden importar nada de `infrastructure`.
    - Verifica que los casos de uso implementen una interfaz (`port.in`) y usen interfaces para comunicarse hacia afuera (`port.out`).
 
-4. **Auditar la Capa de Infraestructura (`infraestructura`):**
+4. **Auditar la Capa de infrastructure (`infrastructure`):**
    - Revisa los controladores en `adapter.in.rest` y repositorios en `adapter.out.persistence`.
    - Verifica que los controladores llamen a las interfaces de los casos de uso (`port.in`) y no directamente al dominio ni a las bases de datos.
 
@@ -40,18 +40,23 @@ com.empresa.logistica.gestionusuarios
 │   ├── exception   (Errores de negocio)
 │   └── service     (Lógica que cruza varias entidades)
 ├── application
-│   ├── port.in     (Interfaces de casos de uso)
-│   ├── port.out    (Interfaces hacia bases de datos/externos)
+│   ├── port
+│   │   ├── in      (Interfaces de casos de uso)
+│   │   └── out     (Interfaces hacia bases de datos/externos)
 │   ├── command     (DTOs de entrada a los casos de uso)
 │   └── service     (Implementación de port.in)
-└── infraestructura
-    ├── adapter.in.rest          (Spring @RestController)
-    ├── adapter.out.persistence  (Spring @Repository y Entidades JPA)
+└── infrastructure
+    ├── adapter
+    │   ├── in
+    │   │   └── rest             (Spring @RestController)
+    │   └── out
+    │       └── persistence      (Spring @Repository y Entidades JPA)
     └── config                   (Spring @Configuration)
 ```
 
 ## Formato de Reporte Esperado
 Tras finalizar la auditoría (ya sea humana o automatizada), se debe generar un reporte que contenga:
-- 🟢 **Aprobado**: Archivos que cumplen las reglas perfectamente.
-- 🔴 **Violaciones de Arquitectura**: Lista detallada de archivos, líneas exactas y el motivo por el cual rompen las reglas.
-- 🛠️ **Plan de Refactorización**: Sugerencias de código para solucionar los problemas encontrados.
+- **Aprobado**: Archivos que cumplen las reglas perfectamente.
+- **Violaciones de Arquitectura**: Lista detallada de archivos, líneas exactas y el motivo por el cual rompen las reglas.
+- **Plan de Refactorización**: Sugerencias de código para solucionar los problemas encontrados.
+

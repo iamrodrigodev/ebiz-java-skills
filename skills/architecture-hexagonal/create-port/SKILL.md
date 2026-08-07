@@ -1,19 +1,14 @@
----
+﻿---
 name: create-port
-description: Instrucciones para el agente sobre cómo generar Puertos de entrada y salida (In/Out) con ejemplos de código.
+description: Guía y ejemplos de código sobre cómo generar Puertos de entrada y salida (In/Out).
 ---
 
-# Rol y Objetivo
-Eres un Arquitecto de Software Experto. Tu trabajo es definir las fronteras de la aplicación generando Puertos (Interfaces) limpios en la capa `application/port.in` y `application/port.out`.
+# Guía de Implementación: Puertos (Interfaces)
 
-# Instrucciones de Implementación
+## Reglas de Implementación
 
-Al recibir la orden de crear puertos para un nuevo flujo, debes generar las interfaces sin dependencias tecnológicas externas.
-
-# Ejemplos de Código (Patrón a seguir)
-
-## 1. Puerto de Entrada (`application/port/in/ActivarUsuarioUseCase.java`)
-Define lo que el sistema **ofrece**. Es llamado por los controladores (adapter.in).
+### 1. Puerto de Entrada (`application/port/in/ActivarUsuarioUseCase.java`)
+Es un contrato puro de Java. Define lo que el sistema **ofrece** al exterior. Es llamado por los controladores (adapter.in) y ejecutado por los Casos de Uso.
 
 ```java
 package com.empresa.logistica.gestionusuarios.application.port.in;
@@ -21,35 +16,29 @@ package com.empresa.logistica.gestionusuarios.application.port.in;
 import com.empresa.logistica.gestionusuarios.application.command.ActivarUsuarioCommand;
 
 public interface ActivarUsuarioUseCase {
-    
-    // El método suele llamarse execute, invoke, o tener el nombre de la acción.
-    // Recibe un Command y retorna void o un DTO de respuesta de dominio.
     void execute(ActivarUsuarioCommand command);
 }
 ```
 
-## 2. Puerto de Salida (`application/port/out/UsuarioRepositoryPort.java`)
-Define lo que el sistema **necesita**. Es llamado por los casos de uso e implementado por los adaptadores de base de datos (adapter.out).
+### 2. Puerto de Salida (`application/port/out` o `infrastructure/adapter/out`)
+**EXCEPCIÓN DEL EQUIPO (LEY JPA):** A diferencia de la Arquitectura Hexagonal estricta (donde los puertos out son interfaces puras), en este proyecto hemos acordado utilizar directamente **`JpaRepository`**. 
+
+Por lo tanto, en lugar de crear una interfaz pura y luego un adaptador que la implemente, crearemos directamente la interfaz JPA en la capa correspondiente (usualmente tratada como el puerto de salida).
 
 ```java
-package com.empresa.logistica.gestionusuarios.application.port.out;
+package com.empresa.logistica.gestionusuarios.infrastructure.adapter.out.persistence;
 
-import com.empresa.logistica.gestionusuarios.domain.model.Usuario;
-import java.util.Optional;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 
-// REGLA: ESTO NO ES UN JpaRepository. Es una interfaz de Java puro.
-public interface UsuarioRepositoryPort {
-    
-    Optional<Usuario> findById(String id);
-    
-    void save(Usuario usuario);
-    
-    // Solo métodos estrictamente necesarios para el caso de uso
+// REGLA DEL EQUIPO: Usamos directamente JpaRepository en lugar de interfaces puras de Java
+@Repository
+public interface UsuarioRepository extends JpaRepository<UsuarioJpaEntity, String> {
     boolean existsByCorreo(String correo);
 }
 ```
 
-# Restricciones Finales
-Al generar este código, el agente debe:
-- Asegurarse de que el `UsuarioRepositoryPort` **NO** extienda de `org.springframework.data.jpa.repository.JpaRepository`. Es una interfaz pura de Java.
-- Garantizar que los métodos usen tipos primitivos, clases estándar de Java (List, Optional) o Entidades del propio Dominio.
+## Restricciones Finales
+Al programar puertos de salida:
+- **No** crees interfaces de Java puro que luego envuelvas con adaptadores complejos, a menos que sea un cliente HTTP externo. Para base de datos, usa Spring Data JPA directamente.
+

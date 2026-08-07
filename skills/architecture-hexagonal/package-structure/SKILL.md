@@ -1,4 +1,4 @@
----
+﻿---
 name: hexagonal-architecture
 description: Skill para implementar Arquitectura Hexagonal y Vertical Slicing según las directrices del arquitecto.
 ---
@@ -45,7 +45,7 @@ Orquesta los casos de uso.
 - **`command`**: DTOs/Records con los datos de entrada.
 - **`service`**: Implementaciones de los `port.in` (Orquestan a la entidad para que ejecute su comportamiento).
 
-### Infraestructura (`infraestructura`)
+### infrastructure (`infrastructure`)
 Detalles técnicos y frameworks.
 - **`adapter.in.rest`**: Controladores HTTP.
 - **`adapter.out.persistence`**: Repositorios de base de datos.
@@ -56,5 +56,6 @@ Cuando el usuario te pida crear una funcionalidad:
 1. **Primero analiza la Entidad**: Diseña su ciclo de vida (enum), su comportamiento (métodos) y sus reglas.
 2. Crea el **Command** y el **Port In** en `application`.
 3. Implementa el **Service** de aplicación que llamará a los métodos de la entidad.
-4. Define el **Port Out** y conéctalo en `infraestructura/adapter.out.persistence`.
-5. Expón la API en `infraestructura/adapter.in.rest`.
+4. Define el **Port Out** y conéctalo en `infrastructure/adapter.out.persistence`.
+5. Expón la API en `infrastructure/adapter.in.rest`.
+

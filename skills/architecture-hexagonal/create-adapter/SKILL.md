@@ -1,10 +1,10 @@
----
+﻿---
 name: create-adapter
-description: Instrucciones para el agente sobre cómo generar Adaptadores (REST/Persistencia) en Infraestructura con ejemplos de código.
+description: Instrucciones para el agente sobre cómo generar Adaptadores (REST/Persistencia) en infrastructure con ejemplos de código.
 ---
 
 # Rol y Objetivo
-Eres un Desarrollador Experto en Spring Boot. Tu objetivo es conectar los Puertos limpios de la Aplicación con el mundo real (Bases de Datos, APIs REST), creando código en la capa `infraestructura`. Aquí SÍ está permitido y es obligatorio el uso de frameworks.
+Eres un Desarrollador Experto en Spring Boot. Tu objetivo es conectar los Puertos limpios de la Aplicación con el mundo real (Bases de Datos, APIs REST), creando código en la capa `infrastructure`. Aquí SÍ está permitido y es obligatorio el uso de frameworks.
 
 # Instrucciones de Implementación
 
@@ -13,10 +13,10 @@ Al recibir la orden de crear adaptadores, generarás el Controlador REST (`adapt
 # Ejemplos de Código (Patrón a seguir)
 
 ## 1. Adaptador de Entrada (Controlador REST)
-Ubicación: `infraestructura/adapter/in/rest/UsuarioController.java`
+Ubicación: `infrastructure/adapter/in/rest/UsuarioController.java`
 
 ```java
-package com.empresa.logistica.gestionusuarios.infraestructura.adapter.in.rest;
+package com.empresa.logistica.gestionusuarios.infrastructure.adapter.in.rest;
 
 import com.empresa.logistica.gestionusuarios.application.port.in.ActivarUsuarioUseCase;
 import com.empresa.logistica.gestionusuarios.application.command.ActivarUsuarioCommand;
@@ -51,12 +51,12 @@ public class UsuarioController {
 ```
 
 ## 2. Adaptador de Salida (Persistencia JPA)
-Ubicación: `infraestructura/adapter/out/persistence/UsuarioPersistenceAdapter.java`
+Ubicación: `infrastructure/adapter/out/persistence/UsuarioPersistenceAdapter.java`
 
 Este adaptador implementa el `Port Out` y usa un repositorio interno de Spring Data JPA.
 
 ```java
-package com.empresa.logistica.gestionusuarios.infraestructura.adapter.out.persistence;
+package com.empresa.logistica.gestionusuarios.infrastructure.adapter.out.persistence;
 
 import com.empresa.logistica.gestionusuarios.application.port.out.UsuarioRepositoryPort;
 import com.empresa.logistica.gestionusuarios.domain.model.Usuario;
@@ -97,3 +97,4 @@ public class UsuarioPersistenceAdapter implements UsuarioRepositoryPort {
 Al generar este código, el agente debe:
 - No devolver Entidades de dominio directamente en los controladores REST. Si hay que devolver datos, se debe mapear la Entidad a un DTO de respuesta (ej. `UsuarioResponse`).
 - Mantener la separación estricta: La base de datos guarda `UsuarioJpaEntity` (con anotaciones `@Entity`, `@Table`), pero el adaptador lo mapea y le entrega al caso de uso un objeto `Usuario` (modelo puro de dominio).
+

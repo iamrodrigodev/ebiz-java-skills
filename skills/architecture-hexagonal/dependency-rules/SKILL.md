@@ -1,65 +1,31 @@
----
+﻿---
 name: dependency-rules
-description: Instrucciones para auditar estrictamente las reglas de dependencia (The Dependency Rule) en el código.
+description: Instrucciones para auditar las reglas de dependencia, contemplando las excepciones del equipo.
 ---
 
-# Rol y Objetivo
-Eres un Linter de Arquitectura. Tu función es revisar el código fuente proporcionado e identificar si existen violaciones a las reglas de dependencia de la Arquitectura Hexagonal.
+# Guía de Revisión: Reglas de Dependencia
 
-# Reglas Estrictas e Identificación de Violaciones (Ejemplos)
+El agente o desarrollador debe revisar el código fuente e identificar si existen violaciones a las dependencias.
 
-Al revisar cualquier archivo, analiza la sección de `import`.
-
-## 1. Reglas para la capa `domain`
+## 1. Reglas para la capa `domain` (ESTRICTA)
 El dominio NO debe depender de nada externo.
 
-- **✅ Imports Permitidos:**
-  ```java
-  import java.util.*;
-  import java.time.*;
-  // Solo paquetes del propio dominio:
-  import com.empresa.logistica.gestionusuarios.domain.exception.*;
-  ```
-- **❌ Imports Prohibidos (Lanzar Error Crítico):**
-  ```java
-  // ¡PROHIBIDO! El dominio no sabe de Spring
-  import org.springframework.stereotype.Service; 
-  import org.springframework.beans.factory.annotation.Autowired;
-  // ¡PROHIBIDO! El dominio no sabe de JPA
-  import jakarta.persistence.Entity; 
-  import jakarta.persistence.Table;
-  // ¡PROHIBIDO! El dominio no sabe de capas externas
-  import com.empresa.logistica.gestionusuarios.application.*;
-  import com.empresa.logistica.gestionusuarios.infraestructura.*;
-  ```
+- **Imports Permitidos:** `java.util.*`, `java.time.*`, paquetes del propio dominio.
+- **Imports Prohibidos (Error Crítico):** 
+  `org.springframework.*`, `jakarta.persistence.*`, `infrastructure.*`, `application.*`.
 
-## 2. Reglas para la capa `application`
-La aplicación solo conoce al dominio.
+## 2. Reglas para la capa `application` (FLEXIBILIZADA)
+La aplicación conoce al dominio. 
+*Nota del equipo:* Como la "Regla del equipo" dicta el uso de JPA, es posible que los Casos de Uso importen las interfaces `JpaRepository` directamente desde la infrastructure si el equipo ha decidido inyectar los repositorios de Spring Data directo en los servicios de aplicación.
 
-- **✅ Imports Permitidos:**
-  ```java
-  import com.empresa.logistica.gestionusuarios.domain.model.Usuario;
-  import com.empresa.logistica.gestionusuarios.application.port.out.UsuarioRepositoryPort;
-  ```
-- **❌ Imports Prohibidos (Lanzar Error Crítico):**
-  ```java
-  // ¡PROHIBIDO! La aplicación no sabe de infraestructura ni frameworks
-  import org.springframework.web.bind.annotation.RestController;
-  import com.empresa.logistica.gestionusuarios.infraestructura.adapter.out.persistence.UsuarioJpaEntity;
-  ```
+- **Imports Permitidos:**
+  Paquetes de `domain`, y bajo la regla del equipo, paquetes de los repositorios de JPA si se inyectan en los Casos de Uso.
+- **Imports Prohibidos:**
+  Lógica de controladores web (`org.springframework.web.*`).
 
-## 3. Reglas para la capa `infraestructura`
-La infraestructura conoce a la aplicación y al dominio. Es la capa donde residen los frameworks.
+## 3. Reglas para la capa `infrastructure`
+Es la capa donde residen los frameworks.
 
-- **✅ Imports Permitidos:**
-  ```java
-  import org.springframework.web.bind.annotation.*;
-  import jakarta.persistence.*;
-  import com.empresa.logistica.gestionusuarios.application.port.in.ActivarUsuarioUseCase;
-  import com.empresa.logistica.gestionusuarios.domain.model.Usuario;
-  ```
-- **❌ Imports Prohibidos:**
-  - Evitar que un adaptador de entrada (REST) dependa directamente de un adaptador de salida (Persistencia). Deben comunicarse siempre a través de la capa `application`.
+- **Imports Permitidos:**
+  Todo lo relacionado a Spring Boot, JPA, Web, etc. Conoce a `application` y `domain`.
 
-# Acción Requerida
-Si encuentras un `import` que viola estas reglas, debes generar un reporte indicando el archivo exacto, el import problemático y la razón por la cual rompe la Arquitectura Hexagonal.
