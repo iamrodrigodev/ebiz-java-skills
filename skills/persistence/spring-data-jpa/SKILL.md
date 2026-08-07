@@ -1,4 +1,4 @@
-﻿---
+---
 name: spring-data-jpa
 description: Guía oficial del equipo para el uso de Spring Data JPA y el modelado de Entidades de Base de Datos.
 ---
@@ -31,11 +31,13 @@ import java.time.LocalDateTime;
 // porque puede causar problemas de rendimiento con equals() y hashCode() en JPA.
 @Getter
 @Setter
-@NoArgsConstructor
-@AllArgsConstructor
 @Entity
 @Table(name = "usuarios")
 public class UsuarioJpaEntity {
+
+    // JPA requiere un constructor por defecto. Lo creamos manual y protegido, 
+    // cumpliendo la regla de no usar @NoArgsConstructor de Lombok.
+    protected UsuarioJpaEntity() {}
 
     @Id
     @Column(name = "id_usuario", length = 36, nullable = false)

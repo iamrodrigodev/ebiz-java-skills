@@ -1,72 +1,83 @@
-﻿---
+---
 name: domain-model
-description: Asistente interactivo (wizard) para diseñar Entidades de Dominio Rico (Rich Domain Models) y generar su código Java.
+description: Guía de diseño de Entidades de Dominio Rico (Rich Domain Models) y manual paso a paso para programadores e IA.
 ---
 
-# Rol y Objetivo
-Eres un Arquitecto de Software Experto especializado en Domain-Driven Design (DDD). Tu objetivo es diseñar Entidades de Dominio Rico. 
+# Guía de Diseño: Entidades de Dominio Rico
 
-**REGLA DE ORO:** Cuando seas invocado, NO generes código inmediatamente. Primero debes hacerle preguntas al usuario (una fase de entrevista) para comprender el ciclo de vida y las reglas de negocio. Solo después de la entrevista, generarás el código Java.
+Esta guía explica a los desarrolladores y dicta a los agentes de IA cómo construir Entidades de Dominio Rico aplicando los principios de Domain-Driven Design (DDD).
 
-# Fase 1: La Entrevista
-Hazle estas preguntas al usuario para diseñar la entidad:
-1. ¿Qué representa la entidad y cuál es su identificador único (ej. ID, Código)?
-2. ¿Cuál es su ciclo de vida? (Dime todos los estados posibles, ej. PENDIENTE, ACTIVO, INACTIVO).
+**REGLA DE TRABAJO EN PAREJA:** Cuando un humano y un agente diseñen juntos una Entidad, el agente NO debe generar código inmediatamente. Primero debe existir una "fase de diseño" donde el agente le hará preguntas al usuario para comprender el ciclo de vida y las reglas de negocio.
+
+## Fase 1: Entrevista de Diseño (Checklist)
+Antes de escribir código, se deben responder estas preguntas:
+1. ¿Qué representa la entidad y cuál es su identificador único natural?
+2. ¿Cuál es su ciclo de vida? (Definir todos los estados posibles, ej. PENDIENTE, ACTIVO).
 3. ¿Qué comportamientos o acciones modifican la entidad? (Aplica **Lenguaje Ubicuo**: usa verbos exactos del negocio como `activarCuenta()`, `darDeBaja()`, evitando términos técnicos genéricos CRUD como `update()` o `modify()`).
-4. ¿Qué validaciones o reglas de negocio internas existen al ejecutar esas acciones?
+4. ¿Qué validaciones o reglas de negocio internas protegen a estas acciones?
 
-# Fase 2: Generación de Código (El Patrón a Seguir)
+## Fase 2: Implementación (El Patrón Oficial)
 
-Una vez obtenidas las respuestas, debes generar la Entidad en `domain/model`. **Debe ser un Rich Domain Model**, no una clase anémica. 
+Una vez claro el diseño, la Entidad se crea en `domain/model`. **Debe ser un Rich Domain Model**, capaz de proteger sus propios datos.
+*Excepción del equipo:* Aceptamos el uso de Lombok (`@Getter`, `@Builder`) y Jakarta Validation (`@NotNull`) para reducir el código repetitivo, pero NO usamos `@Data` ni `@Setter`.
 
-Fíjate en este ejemplo de cómo debe lucir el código final:
+Ejemplo oficial del equipo:
 
 ```java
 package com.empresa.logistica.gestionusuarios.domain.model;
 
+import lombok.Getter;
+import lombok.Builder;
+import lombok.AccessLevel;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 import java.time.LocalDateTime;
 
-// REGLA: Cero anotaciones de JPA o Spring aquí (@Entity, @Table, @Data ESTÁN PROHIBIDAS).
+// REGLA: Cero anotaciones de persistencia (@Entity, @Table PROHIBIDAS).
+// SÍ están permitidas las ayudas de Lombok y Validation.
+@Getter
+@Builder(access = AccessLevel.PACKAGE)
 public class Usuario {
 
+    @NotBlank
     private final String id;
+    
+    @NotBlank
     private String correo;
+    
+    @NotNull
     private EstadoUsuario estado;
+    
+    @NotNull
     private LocalDateTime fechaCreacion;
 
-    // Enum interno o externo para controlar el ciclo de vida
     public enum EstadoUsuario {
         PENDIENTE_ACTIVACION, ACTIVO, SUSPENDIDO, DADO_DE_BAJA
     }
 
-    // Constructor privado o package-private para obligar al uso de Factory Methods
-    private Usuario(String id, String correo, EstadoUsuario estado) {
+    // Factory Method (Fábrica de Creación Segura)
+    public static Usuario registrarNuevo(String correo) {
         if (correo == null || correo.isBlank()) {
             throw new IllegalArgumentException("El correo es obligatorio");
         }
-        this.id = id;
-        this.correo = correo;
-        this.estado = estado;
-        this.fechaCreacion = LocalDateTime.now();
-    }
-
-    // Factory Method (Regla de Creación)
-    public static Usuario registrarNuevo(String correo) {
-        // Nace siempre en PENDIENTE_ACTIVACION
-        return new Usuario(UUID.randomUUID().toString(), correo, EstadoUsuario.PENDIENTE_ACTIVACION);
+        return Usuario.builder()
+                .id(UUID.randomUUID().toString())
+                .correo(correo)
+                .estado(EstadoUsuario.PENDIENTE_ACTIVACION)
+                .fechaCreacion(LocalDateTime.now())
+                .build();
     }
 
     // ----------------------------------------------------------------------
-    // COMPORTAMIENTO DEL NEGOCIO (RICH DOMAIN Y LENGUAJE UBICUO) - NO USAR SETTERS
+    // COMPORTAMIENTO DEL NEGOCIO (RICH DOMAIN Y LENGUAJE UBICUO)
     // ----------------------------------------------------------------------
 
-    public void activar(String motivo) {
+    public void activarCuenta(String motivo) {
         if (this.estado == EstadoUsuario.DADO_DE_BAJA) {
             throw new IllegalStateException("Un usuario dado de baja no puede reactivarse");
         }
         this.estado = EstadoUsuario.ACTIVO;
-        // Aquí se podría lanzar un Domain Event en el futuro
     }
 
     public void darDeBaja() {
@@ -79,17 +90,10 @@ public class Usuario {
         }
         this.correo = nuevoCorreo;
     }
-
-    // Getters solo para lectura, nada de Setters públicos.
-    public String getId() { return id; }
-    public String getCorreo() { return correo; }
-    public EstadoUsuario getEstado() { return estado; }
 }
 ```
 
-**Restricciones de Generación:**
-- Usa `throw new IllegalStateException` o crea excepciones de dominio personalizadas en la carpeta `domain/exception` para manejar las reglas del negocio.
-- Jamás pongas `@Entity` o heredes de `Serializable` para fines de base de datos.
-- Jamás crees `setEstado(Estado nuevo)` como público; obliga a usar verbos (`activar()`, `suspender()`).
-- Aplica rigurosamente el **Lenguaje Ubicuo** (Ubiquitous Language): Nombra las funciones exactamente como hablan los expertos del negocio. Evita prefijos técnicos o nombres CRUD genéricos.
-
+## Restricciones Generales
+- Las violaciones de reglas de negocio se manejan arrojando `IllegalStateException` o excepciones personalizadas de `domain/exception`.
+- Jamás se utiliza `@Entity` o de hereda de `Serializable` para mapear bases de datos.
+- **Lenguaje Ubicuo**: Todo método público debe nombrarse con verbos funcionales (`activarCuenta()`), estando totalmente prohibidos los setters clásicos (`setEstado()`) para exponer cambios críticos.
