@@ -1,5 +1,5 @@
 ﻿---
-name: create-adapter
+name: persistence-adapters
 description: Instrucciones para el agente sobre cómo generar Adaptadores (REST/Persistencia) en infrastructure con ejemplos de código.
 ---
 

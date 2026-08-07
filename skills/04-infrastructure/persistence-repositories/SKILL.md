@@ -1,5 +1,5 @@
 ﻿---
-name: repositories
+name: persistence-repositories
 description: Guía oficial del equipo para la creación de Repositorios (JpaRepository) y consultas a base de datos.
 ---
 

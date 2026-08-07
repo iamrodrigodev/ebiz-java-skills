@@ -1,21 +1,21 @@
----
-name: spring-data-jpa
-description: Guía oficial del equipo para el uso de Spring Data JPA y el modelado de Entidades de Base de Datos.
+﻿---
+name: persistence-entities
+description: GuÃ­a oficial del equipo para el uso de Spring Data JPA y el modelado de Entidades de Base de Datos.
 ---
 
-# Guía de Implementación: Spring Data JPA (Entidades)
+# GuÃ­a de ImplementaciÃ³n: Spring Data JPA (Entidades)
 
-Esta guía define las reglas de persistencia para desarrolladores y agentes de IA. La regla del equipo dicta el uso exclusivo de **Spring Data JPA** para el acceso a datos.
+Esta guÃ­a define las reglas de persistencia para desarrolladores y agentes de IA. La regla del equipo dicta el uso exclusivo de **Spring Data JPA** para el acceso a datos.
 
 ## Reglas de Mapeo de Entidades JPA
 
-Las entidades de base de datos (`@Entity`) viven exclusivamente en la capa de `infrastructure` y sirven únicamente como un reflejo de las tablas relacionales. **No deben contener lógica de negocio.**
+Las entidades de base de datos (`@Entity`) viven exclusivamente en la capa de `infrastructure` y sirven Ãºnicamente como un reflejo de las tablas relacionales. **No deben contener lÃ³gica de negocio.**
 
-### 1. Ubicación y Nomenclatura
+### 1. UbicaciÃ³n y Nomenclatura
 - **Ruta:** `infrastructure/adapter/out/persistence/entity/`
 - **Sufijo:** Se recomienda usar el sufijo `JpaEntity` o `Entity` (ej. `UsuarioJpaEntity`) para evitar colisiones de nombre con el Dominio Rico (`Usuario`).
 
-### 2. Ejemplo de Implementación (Patrón Oficial)
+### 2. Ejemplo de ImplementaciÃ³n (PatrÃ³n Oficial)
 
 ```java
 package com.empresa.logistica.gestionusuarios.infrastructure.adapter.out.persistence.entity;
@@ -55,6 +55,6 @@ public class UsuarioJpaEntity {
 ```
 
 ## Instrucciones para el Agente (LLM)
-- Nunca añadas lógica de negocio (validaciones complejas, cálculo de estados) dentro de estas entidades. Todo eso pertenece al `Domain Model`.
-- Evita usar la anotación `@Data` de Lombok en entidades JPA. Usa `@Getter` y `@Setter`.
+- Nunca aÃ±adas lÃ³gica de negocio (validaciones complejas, cÃ¡lculo de estados) dentro de estas entidades. Todo eso pertenece al `Domain Model`.
+- Evita usar la anotaciÃ³n `@Data` de Lombok en entidades JPA. Usa `@Getter` y `@Setter`.
 

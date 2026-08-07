@@ -1,23 +1,23 @@
+﻿---
+name: usecases
+description: GuÃ­a y ejemplos de cÃ³digo sobre cÃ³mo generar la lÃ³gica de un Caso de Uso (Application Service).
 ---
-name: create-usecase
-description: Guía y ejemplos de código sobre cómo generar la lógica de un Caso de Uso (Application Service).
----
 
-# Guía de Implementación: Casos de Uso
+# GuÃ­a de ImplementaciÃ³n: Casos de Uso
 
-Este documento establece el estándar del equipo (tanto para desarrolladores humanos como para agentes de IA) para generar Casos de Uso (Application Services). El objetivo principal es garantizar que esta capa cumpla con el aislamiento requerido por la Arquitectura Hexagonal, **aprovechando las ventajas de validación de Spring/Jakarta**.
+Este documento establece el estÃ¡ndar del equipo (tanto para desarrolladores humanos como para agentes de IA) para generar Casos de Uso (Application Services). El objetivo principal es garantizar que esta capa cumpla con el aislamiento requerido por la Arquitectura Hexagonal, **aprovechando las ventajas de validaciÃ³n de Spring/Jakarta**.
 
-## Reglas de Implementación
+## Reglas de ImplementaciÃ³n
 
-Al crear un Caso de Uso, se deben generar las siguientes piezas de código en la capa `application` del módulo correspondiente:
+Al crear un Caso de Uso, se deben generar las siguientes piezas de cÃ³digo en la capa `application` del mÃ³dulo correspondiente:
 
 1. **El Command (DTO de entrada)** en `application/command`.
-2. **La Implementación del Servicio** en `application/service`.
+2. **La ImplementaciÃ³n del Servicio** en `application/service`.
 
-## Ejemplos de Código (Patrón Oficial del Equipo)
+## Ejemplos de CÃ³digo (PatrÃ³n Oficial del Equipo)
 
 ### 1. El Command (`application/command/ActivarUsuarioCommand.java`)
-Es un simple registro o DTO inmutable. El equipo **fomenta** el uso de Jakarta Validation (`@NotNull`, `@NotBlank`) para blindar el Caso de Uso, evitando código manual repetitivo.
+Es un simple registro o DTO inmutable. El equipo **fomenta** el uso de Jakarta Validation (`@NotNull`, `@NotBlank`) para blindar el Caso de Uso, evitando cÃ³digo manual repetitivo.
 
 ```java
 package com.empresa.logistica.gestionusuarios.application.command;
@@ -37,8 +37,8 @@ public record ActivarUsuarioCommand(
 }
 ```
 
-### 2. La Implementación del Caso de Uso (`application/service/ActivarUsuarioService.java`)
-Esta clase **NO** lleva `@Service` ni `@Autowired`. La inyección se hace por constructor y la configuración de beans ocurrirá en infraestructura. Es Java puro.
+### 2. La ImplementaciÃ³n del Caso de Uso (`application/service/ActivarUsuarioService.java`)
+Esta clase **NO** lleva `@Service` ni `@Autowired`. La inyecciÃ³n se hace por constructor y la configuraciÃ³n de beans ocurrirÃ¡ en infraestructura. Es Java puro.
 
 ```java
 package com.empresa.logistica.gestionusuarios.application.service;
@@ -49,21 +49,21 @@ import com.empresa.logistica.gestionusuarios.application.command.ActivarUsuarioC
 import com.empresa.logistica.gestionusuarios.domain.model.Usuario;
 import com.empresa.logistica.gestionusuarios.domain.exception.UsuarioNoEncontradoException;
 
-// REGLA: PROHIBIDO USAR @Service de Spring aquí.
+// REGLA: PROHIBIDO USAR @Service de Spring aquÃ­.
 public class ActivarUsuarioService implements ActivarUsuarioUseCase {
 
     private final UsuarioRepository usuarioRepository;
 
-    // Inyección pura por constructor
+    // InyecciÃ³n pura por constructor
     public ActivarUsuarioService(UsuarioRepository usuarioRepository) {
         this.usuarioRepository = usuarioRepository;
     }
 
     @Override
     public void execute(ActivarUsuarioCommand command) {
-        // En este punto, el 'command' ya fue validado automáticamente por los Controladores
+        // En este punto, el 'command' ya fue validado automÃ¡ticamente por los Controladores
         
-        // 1. Obtener del repositorio (Port Out) - Ejemplo asumiendo inyección directa JPA
+        // 1. Obtener del repositorio (Port Out) - Ejemplo asumiendo inyecciÃ³n directa JPA
         UsuarioJpaEntity entity = usuarioRepository.findById(command.usuarioId())
             .orElseThrow(() -> new UsuarioNoEncontradoException(command.usuarioId()));
         
@@ -79,6 +79,6 @@ public class ActivarUsuarioService implements ActivarUsuarioUseCase {
 ```
 
 ## Restricciones Finales
-Al revisar o generar este código:
-- Asegúrate de que no exista ningún `import org.springframework.stereotype.Service` en estos archivos.
-- Valida que la lógica de negocio pura (como verificar si el usuario puede activarse) esté encapsulada dentro de la Entidad (ej. `usuario.activarCuenta()`), y no expuesta al aire en este Servicio.
+Al revisar o generar este cÃ³digo:
+- AsegÃºrate de que no exista ningÃºn `import org.springframework.stereotype.Service` en estos archivos.
+- Valida que la lÃ³gica de negocio pura (como verificar si el usuario puede activarse) estÃ© encapsulada dentro de la Entidad (ej. `usuario.activarCuenta()`), y no expuesta al aire en este Servicio.

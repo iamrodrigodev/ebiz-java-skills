@@ -1,5 +1,5 @@
 ﻿---
-name: mappers
+name: persistence-mappers
 description: Guía oficial del equipo para mapear objetos entre el Dominio Rico y las Entidades JPA.
 ---
 
