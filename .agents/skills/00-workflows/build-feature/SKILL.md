@@ -1,45 +1,44 @@
 ﻿---
 name: build-feature
-description: Asistente orquestador (Master Skill) para construir una capacidad/funcionalidad completa End-to-End siguiendo el manual oficial.
+description: Asistente orquestador (Master Skill) para construir un Bounded Context End-to-End siguiendo el manual oficial y previniendo alucinaciones.
 ---
 
-# Master Skill: Desarrollo End-to-End de una Funcionalidad
+# Master Skill: Desarrollo End-to-End
 
-Esta es la skill más poderosa del sistema. Sirve como un Orquestador. Cuando el usuario te pida construir una nueva capacidad (ej. "Construye la Gestión de Libros" o "Crea la funcionalidad de Carrito"), **debes seguir estrictamente los siguientes pasos secuenciales**, consultando las sub-skills mencionadas cuando tengas dudas.
+**Objetivo:** Guiar a la IA (o desarrollador humano) paso a paso en la implementacion completa de una nueva funcionalidad cruzando todas las capas de Arquitectura Hexagonal y respetando los rigurosos canones de inmutabilidad del equipo.
 
-**REGLA DE ORO:** No escribas todo el código de golpe. Haz pausas estratégicas (preguntando al humano si está de acuerdo con el avance) después de la Fase 1 y la Fase 2.
+## Flujo Estricto de Orquestacion
 
-## FASE 1: Diseño del Dominio (El Corazón)
-1. **Entrevista de Negocio:** Hazle preguntas al usuario sobre las reglas de vigencia, estados y acciones que sufre la Entidad (apoyate en la skill `domain-model`).
-2. **Generación del Modelo Rico:**
-   - Crea la Entidad en `domain/model` con fábrica de creación segura y constructores privados.
-   - Crea *Value Objects* para campos que requieran tipado fuerte. Lee la skill `value-objects`.
-3. **Pruebas del Dominio:**
-   - Crea las pruebas unitarias sin mocks en `domain/model` verificando las invariantes. Lee la skill `domain-testing`.
+Cuando el usuario te pida construir una nueva capacidad (ej. "Construye el modulo de Vehiculos"), debes cumplir estrictamente las Fases de este Pipeline Secuencial.
 
-## FASE 2: Diseño de la Aplicación (La Orquestación)
-1. **Generación de Commands y Ports:**
-   - Crea los `Command` inmutables (con Jakarta Validation) y los puertos (`port.in` y `port.out`). Lee la skill `ports`.
-2. **Generación de Casos de Uso:**
-   - Crea los `Service` que implementen los `port.in`. Recuerda: no usan `@Service`. Lee la skill `usecases`.
-3. **Pruebas de Aplicación:**
-   - Crea pruebas unitarias usando `Mockito` para validar la orquestación. Lee la skill `application-testing`.
+**REGLA DE ORO:** Realiza pausas estratégicas (solicita confirmación al usuario o pregunta detalles funcionales) entre Fase 1 y Fase 2.
 
-## FASE 3: Infraestructura REST y Persistencia
-1. **Controladores y Mappers (REST):**
-   - Crea el `Controller` con endpoints semánticos, junto con sus `RequestDTO`, `ResponseDTO` y su `Mapper`. Lee la skill `rest-mappers`.
-   - Asegúrate de que el `GlobalExceptionHandler` esté configurado para atrapar errores (lee la skill `global-exception-handler`).
-2. **Base de Datos (Persistencia):**
-   - Crea la `JpaEntity`, el `JpaRepository` y el `Adapter` que implemente el `port.out`.
-   - Verifica la configuración de SQL Server si es necesario (lee `sql-server-config`).
+---
 
-## FASE 4: Validación End-to-End
-1. **Pruebas de Integración:**
-   - Crea pruebas E2E con `@SpringBootTest` y `MockMvc` validando flujos de éxito (ej. usuario creado) y flujos de error (ej. correo duplicado, entidad no encontrada). Lee la skill `e2e-testing`.
+### FASE 1: Diseño del Dominio Puro (El Corazón)
+*Lectura obligatoria:* `02-domain/domain-model`, `02-domain/value-objects`, `02-domain/cross-cutting-domain`
+1. **Modelado Rico:** Define los `Value Objects` (ej. Matricula) blindando la data en su "punto de verdad local". Construye los `Enums` estaticos de clasificacion o estado.
+2. **Auditoria y Nacimiento:** Haz que la Entidad de negocio herede de `EntidadAuditada`. Define su Constructor con visibilidad `private` y añade las fábricas estáticas `crear()` y `rehidratar()`.
+3. **Pruebas de Dominio (Testing):** (Consulta `05-testing/domain-testing`). Diseña tests parametrizados usando JUnit puro (¡Cero `@SpringBootTest`!). Valida invariantes y mutaciones sin levantar contexto.
 
-## Instrucciones para el Agente (LLM)
-- Actúa como un Arquitecto de Software y Tech Lead.
-- Cuando inicies este workflow, imprime en pantalla un Checklist (Markdown) con estas 4 Fases para que el usuario sepa en qué paso van.
-- Utiliza checkmarks ( [x] ) a medida que avances de fase.
+### FASE 2: Diseño de la Aplicación (La Orquestación)
+*Lectura obligatoria:* `03-application/usecases`, `03-application/ports`
+1. **Contratos e Intenciones:** Define el DTO inmutable `Command`. Crea los contratos de los Puertos de Entrada (`*UseCase`) y Salida (`*Port`), diseñandolos segun la accion y capacidad.
+2. **Servicio y Transaccionalidad:** Construye el `Application Service` que une y orquesta la validacion previa al Dominio, instanciando la Entidad para despues persistirla. Utiliza inyeccion manual en constructor y añade `@Transactional` segun corresponda (Consulta `03-application/transactions`).
+3. **Pruebas de Orquestacion:** (Consulta `05-testing/application-testing`). ¡PROHIBIDO USAR MOCKITO! Implementa clases `*Fake` locales (en memoria) para simular los puertos de salida y usa `Clock.fixed` para dominar la asercion temporal de datos.
 
+### FASE 3: Capa de Infraestructura (La Frontera REST y SQL)
+*Lectura obligatoria:* `04-infrastructure/rest-api`, `04-infrastructure/sql-server-config`, `04-infrastructure/persistence-entities`
+1. **Controladores y Mapeos:** Expone el Input Adapter en `UsuarioController`, acompáñalo de sus propios DTOs JSON (`Request`/`Response` con `@Valid`). Construye un Mapper final manual sin frameworks automaticos para inyectarlo hacia el Command.
+2. **Integridad de Base de Datos:** Configura las anotaciones JPA unicamente en el `UsuarioJpaEntity` y levanta su propio `UsuarioPersistenceMapper`. Anade scripts migratorios T-SQL (`V0XX.sql`).
+
+### FASE 4: Cierre E2E y Gestion de Errores Globales
+*Lectura obligatoria:* `04-infrastructure/global-exception-handler`, `05-testing/e2e-testing`, `06-libraries/spring-ecosystem`
+1. **Manejo Centralizado:** Anade soporte a los nuevos fallos semanticos generados dentro del `GlobalExceptionHandler` retornando siempre un payload customizado `ApiErrorResponse`.
+2. **Integracion E2E:** Levanta el contexto y asegura el ciclo total utilizando Postman/MockMvc evaluando Happy Path (HTTP 201) y Negativas (HTTP 409, 404).
+3. **Inyeccion Maestra:** Registra formalmente todos los adaptadores, servicios y mappers que creaste en el ciclo manual dentro del archivo `@Configuration` (`Gestion*Config.java`).
+
+## Instrucciones Especificas para Agentes IA
+- Si detectas inconsistencias en la solicitud del humano, deten el ciclo e invoca preguntas precisas.
+- Imprime siempre este checklist en Markdown con marcas `[ ]` o `[x]` al iniciar el flujo para guiar la lectura de las iteraciones conversacionales.
 

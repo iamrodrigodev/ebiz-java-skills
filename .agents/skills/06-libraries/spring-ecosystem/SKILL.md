@@ -1,25 +1,68 @@
 ---
 name: spring-ecosystem
-description: Guía de adopción del ecosistema Spring Boot en la arquitectura.
+description: Mejores practicas para la integracion de Spring Boot respetando la Arquitectura Hexagonal.
 ---
 
-# Guía de Implementación: Ecosistema Spring Boot
+# Guia de Ecosistema Spring Boot
 
-Aunque la Arquitectura Hexagonal aísla la lógica de negocio (Dominio) de los frameworks, **este proyecto adopta Spring Boot como su esqueleto principal**. Los desarrolladores y agentes de IA deben aprovechar al máximo las herramientas de Spring en las capas permitidas.
+**Objetivo:** Utilizar el inmenso poder de Spring Framework (Inyeccion de Dependencias, Transacciones, REST, Datos) como un detalle periferico en lugar de acoplarlo como cerebro maestro del sistema.
 
-## Reglas de Uso de Spring
+## Reglas de Implementacion y Arquitectura
 
-1. **Inyección de Dependencias (IoC):**
-   - Usa la inyección por constructor nativa de Java en TODAS las capas.
-   - ¡NO uses `@Autowired` en los campos!
-   - Usa las anotaciones de estereotipo (`@RestController`, `@Repository`, `@Component`, `@Configuration`) **únicamente** en la capa de `infrastructure`.
+1. **Aislamiento en Configuracion Central:** El modelo indica no inundar las clases de Application o Domain con `@Component`, `@Service`, o `@Autowired`. Las clases de negocio son Puras (POJOs), se ensamblan e inyectan desde archivos estaticos en el paquete `config`.
+2. Las unicas excepciones a la regla son la capa web (Controladores con `@RestController`), Excepciones Globales (`@RestControllerAdvice`) y Persistencia (`JpaRepository`), debido a la acentuada dependencia con los protocolos subyacentes.
 
-2. **Capa de Aplicación (Casos de Uso):**
-   - Para registrar los Casos de Uso en el contexto de Spring sin contaminarlos con `@Service`, el equipo debe usar una clase de `@Configuration` en la capa de `infrastructure` que instancie los servicios puros usando `@Bean`.
+## Lo que SI debes hacer (Buenas Practicas)
 
-3. **Manejo de Errores (@ControllerAdvice):**
-   - Los errores lanzados por el dominio (`domain/exception`) o por validaciones deben ser atrapados globalmente en la infraestructura usando un `@RestControllerAdvice`. No ensucies los Controladores con bloques `try-catch`.
+```java
+package pe.com.mcalderon.logistica.identidades.gestionusuarios.infrastructure.config;
 
-## Instrucciones para el Agente (LLM)
-- Cuando el usuario pida ayuda para Spring, asume que se refiere a las mejores prácticas de Spring Boot 3.x (Jakarta EE, no Javax).
-- Si vas a proponer un nuevo componente técnico (un cliente HTTP, un publicador de eventos), busca siempre la solución nativa de Spring (ej. `RestClient`, `ApplicationEventPublisher`) antes de introducir librerías de terceros.
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+// El Ensamblador de Spring (El unico archivo consciente de las piezas del rompecabezas)
+@Configuration
+public class GestionUsuariosConfig {
+
+    @Bean
+    public CrearUsuarioRestMapper crearUsuarioRestMapper() {
+        return new CrearUsuarioRestMapper();
+    }
+
+    @Bean
+    public UsuarioPersistenceAdapter usuarioPersistenceAdapter(
+        UsuarioJpaRepository usuarioJpaRepository,
+        UsuarioPersistenceMapper usuarioPersistenceMapper
+    ) {
+        return new UsuarioPersistenceAdapter(usuarioJpaRepository, usuarioPersistenceMapper);
+    }
+
+    @Bean
+    public CrearUsuarioUseCase crearUsuarioUseCase(
+        ConsultarUsuarioPort consultarUsuarioPort,
+        GuardarUsuarioPort guardarUsuarioPort,
+        Clock clock
+    ) {
+        // Enlaza las implementaciones puras inyectando los Fakes / Ports via constructor
+        return new CrearUsuarioService(consultarUsuarioPort, guardarUsuarioPort, clock);
+    }
+}
+```
+
+## Lo que NO debes hacer (Anti-patrones)
+
+- Abusar de `@Autowired` en las propiedades (Field Injection). Siempre prioriza Inyeccion de Constructor que protege la inmutabilidad (`private final`).
+
+```java
+// ANTI-PATRON RECHAZADO: Field Injection + Contaminacion de Capa Aplicacion
+@Service
+public class CrearUsuarioService {
+    @Autowired // MALA PRACTICA
+    private GuardarUsuarioPort puerto;
+}
+```
+
+## Instrucciones Especificas para Agentes IA
+
+- Cada vez que crees un componente (Service, Mapper, Adapter) en este proyecto, asegurate de obviar por defecto los decoradores como `@Component` y agregarlos en la clase `@Configuration` del modulo.
+- El objeto `Clock` de Java `java.time` siempre debera configurarse y devolverse como un `@Bean` desde aqui para poder hacer simulaciones temporales correctas (`Clock.fixed()`) durante el testeo.

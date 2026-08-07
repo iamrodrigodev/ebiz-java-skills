@@ -1,84 +1,65 @@
-﻿---
+---
 name: usecases
-description: GuÃ­a y ejemplos de cÃ³digo sobre cÃ³mo generar la lÃ³gica de un Caso de Uso (Application Service).
+description: Guia de orquestacion para Casos de Uso (Application Services).
 ---
 
-# GuÃ­a de ImplementaciÃ³n: Casos de Uso
+# Guia de Casos de Uso (Application Services)
 
-Este documento establece el estÃ¡ndar del equipo (tanto para desarrolladores humanos como para agentes de IA) para generar Casos de Uso (Application Services). El objetivo principal es garantizar que esta capa cumpla con el aislamiento requerido por la Arquitectura Hexagonal, **aprovechando las ventajas de validaciÃ³n de Spring/Jakarta**.
+**Objetivo:** La capa Application representa la orquestacion de un caso de uso. Su responsabilidad no es implementar reglas de negocio, sino coordinar la colaboracion entre el dominio y los servicios externos necesarios para completar la operacion. Application traduce, Domain razona.
 
-## Reglas de ImplementaciÃ³n
+## Reglas de Implementacion y Arquitectura
 
-Al crear un Caso de Uso, se deben generar las siguientes piezas de cÃ³digo en la capa `application` del mÃ³dulo correspondiente:
+1. **Commands como Entrada:** La aplicacion recibe intenciones representadas en objetos inmutables (`Command`), no entidades de dominio ni DTOs HTTP.
+2. **Resultados Estables:** Se debe evitar devolver la Entidad de Dominio completa hacia afuera, ya que acopla los consumidores al crecimiento interno de la entidad. Retornar solo lo que el caso de uso necesite (`UsuarioId` o un `*Result`).
+3. **Validaciones Previas:** Application puede consultar puertos para validaciones externas (ej. "el correo ya existe en BD") antes de ceder el control al dominio.
+4. **Instanciacion sin Spring:** Las clases se nombran con el sufijo `*Service`, pero NO utilizan la anotacion `@Service`. Se registran manualmente en la configuracion.
 
-1. **El Command (DTO de entrada)** en `application/command`.
-2. **La ImplementaciÃ³n del Servicio** en `application/service`.
-
-## Ejemplos de CÃ³digo (PatrÃ³n Oficial del Equipo)
-
-### 1. El Command (`application/command/ActivarUsuarioCommand.java`)
-Es un simple registro o DTO inmutable. El equipo **fomenta** el uso de Jakarta Validation (`@NotNull`, `@NotBlank`) para blindar el Caso de Uso, evitando cÃ³digo manual repetitivo.
+## Lo que SI debes hacer (Buenas Practicas)
 
 ```java
-package com.empresa.logistica.gestionusuarios.application.command;
+import java.util.Objects;
 
-import jakarta.validation.constraints.NotBlank;
-import lombok.Builder;
-
-// Se permite usar Record de Java o Clases con @Value/@Builder de Lombok
-@Builder
-public record ActivarUsuarioCommand(
-    @NotBlank(message = "El ID de usuario es requerido")
-    String usuarioId,
+// El servicio no lleva la anotacion @Service
+public final class CrearUsuarioService implements CrearUsuarioUseCase {
     
-    @NotBlank(message = "Debe proporcionar un motivo")
-    String motivo
-) {
-}
-```
+    private final ConsultarUsuarioPort consultarUsuarioPort;
+    private final GuardarUsuarioPort guardarUsuarioPort;
 
-### 2. La ImplementaciÃ³n del Caso de Uso (`application/service/ActivarUsuarioService.java`)
-Esta clase **NO** lleva `@Service` ni `@Autowired`. La inyecciÃ³n se hace por constructor y la configuraciÃ³n de beans ocurrirÃ¡ en infraestructura. Es Java puro.
-
-```java
-package com.empresa.logistica.gestionusuarios.application.service;
-
-import com.empresa.logistica.gestionusuarios.application.port.in.ActivarUsuarioUseCase;
-import com.empresa.logistica.gestionusuarios.application.port.out.UsuarioRepository;
-import com.empresa.logistica.gestionusuarios.application.command.ActivarUsuarioCommand;
-import com.empresa.logistica.gestionusuarios.domain.model.Usuario;
-import com.empresa.logistica.gestionusuarios.domain.exception.UsuarioNoEncontradoException;
-
-// REGLA: PROHIBIDO USAR @Service de Spring aquÃ­.
-public class ActivarUsuarioService implements ActivarUsuarioUseCase {
-
-    private final UsuarioRepository usuarioRepository;
-
-    // InyecciÃ³n pura por constructor
-    public ActivarUsuarioService(UsuarioRepository usuarioRepository) {
-        this.usuarioRepository = usuarioRepository;
+    public CrearUsuarioService(ConsultarUsuarioPort consultarUsuarioPort, GuardarUsuarioPort guardarUsuarioPort) {
+        this.consultarUsuarioPort = Objects.requireNonNull(consultarUsuarioPort, "Puerto no puede ser nulo");
+        this.guardarUsuarioPort = Objects.requireNonNull(guardarUsuarioPort, "Puerto no puede ser nulo");
     }
 
     @Override
-    public void execute(ActivarUsuarioCommand command) {
-        // En este punto, el 'command' ya fue validado automÃ¡ticamente por los Controladores
-        
-        // 1. Obtener del repositorio (Port Out) - Ejemplo asumiendo inyecciÃ³n directa JPA
-        UsuarioJpaEntity entity = usuarioRepository.findById(command.usuarioId())
-            .orElseThrow(() -> new UsuarioNoEncontradoException(command.usuarioId()));
-        
-        Usuario usuario = UsuarioMapper.toDomain(entity);
-        
-        // 2. Ejecutar comportamiento del dominio rico
-        usuario.activarCuenta(command.motivo());
-        
-        // 3. Guardar cambios usando el puerto de salida
-        usuarioRepository.save(UsuarioMapper.toJpaEntity(usuario));
+    public UsuarioId crearUsuario(CrearUsuarioCommand command) {
+        if (command == null) throw new IllegalArgumentException("El comando no puede ser nulo");
+
+        // 1. Validar reglas externas
+        if (consultarUsuarioPort.existeUsuarioConCorreo(new CorreoElectronico(command.correo()))) {
+            throw new CorreoElectronicoYaRegistradoException(command.correo());
+        }
+
+        // 2. Coordinar creacion con el Dominio
+        Usuario usuario = Usuario.crear(
+            new PersonaId(command.personaId()),
+            command.nombre(),
+            new CorreoElectronico(command.correo())
+        );
+
+        // 3. Persistir y retornar solo el ID
+        return guardarUsuarioPort.guardar(usuario);
     }
 }
 ```
 
-## Restricciones Finales
-Al revisar o generar este cÃ³digo:
-- AsegÃºrate de que no exista ningÃºn `import org.springframework.stereotype.Service` en estos archivos.
-- Valida que la lÃ³gica de negocio pura (como verificar si el usuario puede activarse) estÃ© encapsulada dentro de la Entidad (ej. `usuario.activarCuenta()`), y no expuesta al aire en este Servicio.
+## Lo que NO debes hacer (Anti-patrones)
+
+- Implementar `if(usuario.edad < 18)` dentro del Application Service. El calculo y evaluacion de la edad pertenece al dominio.
+- Utilizar `@Autowired` o `@Service` en la capa de aplicacion.
+- Retornar la clase `Usuario` al finalizar el metodo, exponiendo toda su data al controlador HTTP.
+
+## Instrucciones Especificas para Agentes IA
+
+- Siempre que crees un caso de uso, asegurate de recibir un objeto `Command` inmutable.
+- Nunca apliques reglas de validacion intrinsecas (ej. formato del correo) en el servicio; esa es tarea del Value Object en el Dominio.
+- Utiliza la convencion de inyeccion por constructor con verificacion `Objects.requireNonNull`.

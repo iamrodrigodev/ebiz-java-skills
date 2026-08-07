@@ -1,78 +1,61 @@
-﻿---
+---
 name: persistence-mappers
-description: Guía oficial del equipo para mapear objetos entre el Dominio Rico y las Entidades JPA.
+description: Guia para crear Mappers manuales entre el Dominio y Entidades JPA.
 ---
 
-# Guía de Implementación: Mappers (Dominio ↔ JPA)
+# Guia de Mappers de Persistencia
 
-En este proyecto, el Dominio (Java puro) y la infrastructure (JPA) están separados. Por lo tanto, necesitamos traducir la información cuando los datos entran o salen de la base de datos. Esta guía explica cómo hacerlo.
+**Objetivo:** Implementar el componente tecnico unico encargado de traducir bidireccionalmente el Modelo de Dominio rico y la Entidad JPA de base de datos, evitando que cualquiera de los dos modelos conozca la existencia del otro.
 
-## Reglas de Mapeo
+## Reglas de Implementacion y Arquitectura
 
-- Todo mapeo entre `Usuario` (Dominio) y `UsuarioJpaEntity` (JPA) debe ocurrir **antes o después** del Caso de Uso, o encapsularse en una clase/interfaz específica.
-- El equipo promueve el uso de constructores manuales, Builders o la librería **MapStruct** para automatizar el proceso sin usar Reflexión lenta.
+1. **Aislamiento Total:** El mapper actua como traductor. Toma una Entidad de Dominio y devuelve una `JpaEntity`, o viceversa.
+2. **Cero Logica de Negocio:** El mapper NUNCA debe ejecutar validaciones funcionales (ej. validar si una fecha de expiracion ya paso).
+3. **Mapeo Manual:** Por convencion arquitectonica del manual base, se evitan herramientas automaticas (como MapStruct) para la persistencia, usando metodos `public final class` con validaciones `Objects.requireNonNull()`.
 
-## Ejemplos de Implementación (Patrón Oficial)
-
-### Opción 1: Mapeo Manual (Recomendado para casos simples)
-
-Crea una clase utilitaria en la infrastructure: `infrastructure/adapter/out/persistence/mapper/UsuarioMapper.java`
+## Lo que SI debes hacer (Buenas Practicas)
 
 ```java
-package com.empresa.logistica.gestionusuarios.infrastructure.adapter.out.persistence.mapper;
+import java.util.Objects;
 
-import com.empresa.logistica.gestionusuarios.domain.model.Usuario;
-import com.empresa.logistica.gestionusuarios.infrastructure.adapter.out.persistence.entity.UsuarioJpaEntity;
+public final class UsuarioPersistenceMapper {
 
-public class UsuarioMapper {
-
-    // JPA -> DOMINIO (Cuando leemos de la BD)
-    public static Usuario toDomain(UsuarioJpaEntity entity) {
-        if (entity == null) return null;
+    // 1. Dominio -> Persistencia
+    public UsuarioJpaEntity aJpaEntity(Usuario usuario) {
+        Objects.requireNonNull(usuario, "Usuario no puede ser nulo");
         
-        // Usamos el constructor o builder de la Entidad de Dominio
-        return Usuario.reconstruirDesdeBD(
-            entity.getId(), 
-            entity.getCorreo(), 
-            Usuario.EstadoUsuario.valueOf(entity.getEstado())
+        return new UsuarioJpaEntity(
+            usuario.id() == null ? null : usuario.id().valor(),
+            usuario.personaId() == null ? null : usuario.personaId().valor(),
+            usuario.nombre(),
+            usuario.correo().valor(),
+            usuario.origen().codigo(),
+            usuario.fechaCreacion()
         );
     }
 
-    // DOMINIO -> JPA (Cuando guardamos en la BD)
-    public static UsuarioJpaEntity toJpaEntity(Usuario domain) {
-        if (domain == null) return null;
+    // 2. Persistencia -> Dominio
+    public Usuario aDominio(UsuarioJpaEntity entity) {
+        Objects.requireNonNull(entity, "UsuarioJpaEntity no puede ser nulo");
         
-        UsuarioJpaEntity entity = new UsuarioJpaEntity();
-        entity.setId(domain.getId());
-        entity.setCorreo(domain.getCorreo());
-        entity.setEstado(domain.getEstado().name());
-        
-        return entity;
+        return Usuario.rehidratar(
+            new UsuarioId(entity.usuarioId()),
+            new PersonaId(entity.personaId()),
+            entity.nombre(),
+            new CorreoElectronico(entity.correo()),
+            OrigenUsuario.desdeCodigo(entity.origenCodigo()),
+            entity.fechaCreacion()
+        );
     }
 }
 ```
 
-### Opción 2: Usando MapStruct (Recomendado para objetos grandes)
+## Lo que NO debes hacer (Anti-patrones)
 
-```java
-package com.empresa.logistica.gestionusuarios.infrastructure.adapter.out.persistence.mapper;
+- Usar inyeccion de dependencias dentro del mapper para ir a consultar algo a la base de datos (los mappers no tienen acceso a repositorios).
+- Envolver la creacion del dominio dentro de un `try-catch` gigante ignorando las invariantes del objeto real.
 
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import com.empresa.logistica.gestionusuarios.domain.model.Usuario;
-import com.empresa.logistica.gestionusuarios.infrastructure.adapter.out.persistence.entity.UsuarioJpaEntity;
+## Instrucciones Especificas para Agentes IA
 
-@Mapper(componentModel = "spring")
-public interface UsuarioMapStructMapper {
-
-    // Las propiedades se mapean automáticamente por coincidencia de nombres
-    Usuario toDomain(UsuarioJpaEntity entity);
-
-    UsuarioJpaEntity toJpaEntity(Usuario domain);
-}
-```
-
-## Instrucciones para el Agente (LLM)
-- Cuando debas mapear, nunca contamines la capa de Dominio con referencias a `UsuarioJpaEntity`. El mapeo ocurre en infrastructure.
-- Si el proyecto usa MapStruct, genera la interfaz `@Mapper`. Si no lo especifican, asume un Mapper manual estático.
-
+- Siempre debes llamar a la fabrica `rehidratar()` en lugar de `crear()` cuando devuelvas informacion desde la base de datos hacia el dominio, ya que el objeto ya nacio en el pasado y no debe disparar eventos de nacimiento ni validaciones iniciales bloqueantes.
+- Utiliza operaciones ternarias o metodos utilitarios nativos para lidiar con posibles nulos en primitivos mapeados desde objetos complejos.

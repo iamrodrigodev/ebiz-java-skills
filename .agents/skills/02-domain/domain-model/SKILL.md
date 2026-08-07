@@ -1,99 +1,74 @@
 ---
 name: domain-model
-description: Guía de diseño de Entidades de Dominio Rico (Rich Domain Models) y manual paso a paso para programadores e IA.
+description: Guia estricta para la construccion de Entidades de Dominio rico.
 ---
 
-# Guía de Diseño: Entidades de Dominio Rico
+# Guia de Modelado de Dominio Rico
 
-Esta guía explica a los desarrolladores y dicta a los agentes de IA cómo construir Entidades de Dominio Rico aplicando los principios de Domain-Driven Design (DDD).
+**Objetivo:** Desarrollar agregados y entidades de negocio puras, que protejan sus propias invariantes, mantengan el estado interno completamente encapsulado, y expongan solo operaciones semanticas de negocio, evitando el anti-patron de entidades anemicas.
 
-**REGLA DE TRABAJO EN PAREJA:** Cuando un humano y un agente diseñen juntos una Entidad, el agente NO debe generar código inmediatamente. Primero debe existir una "fase de diseño" donde el agente le hará preguntas al usuario para comprender el ciclo de vida y las reglas de negocio.
+## Reglas de Implementacion y Arquitectura
 
-## Fase 1: Entrevista de Diseño (Checklist)
-Antes de escribir código, se deben responder estas preguntas:
-1. ¿Qué representa la entidad y cuál es su identificador único natural?
-2. ¿Cuál es su ciclo de vida? (Definir todos los estados posibles, ej. PENDIENTE, ACTIVO).
-3. ¿Qué comportamientos o acciones modifican la entidad? (Aplica **Lenguaje Ubicuo**: usa verbos exactos del negocio como `activarCuenta()`, `darDeBaja()`, evitando términos técnicos genéricos CRUD como `update()` o `modify()`).
-4. ¿Qué validaciones o reglas de negocio internas protegen a estas acciones?
+1. **Constructores de Nacimiento:** Los constructores de inicializacion deben ser declarados como `private` (o `protected`).
+2. **Fabricas Estaticas Explicitas:** Toda instanciacion debe ocurrir mediante fabricas estaticas (`public static Entity crear(...)` o `public static Entity rehidratar(...)`).
+3. **Validacion de Invariantes Iniciales:** Todo parametro nulo o estado incoherente al momento de la creacion debe lanzar `IllegalArgumentException` o `IllegalStateException`.
+4. **Cero Setters Publicos:** El cambio de estado ocurre exclusivamente mediante operaciones de negocio (`darDeBaja`, `activar`, `renovarVigencia`).
 
-## Fase 2: Implementación (El Patrón Oficial)
-
-Una vez claro el diseño, la Entidad se crea en `domain/model`. **Debe ser un Rich Domain Model**, capaz de proteger sus propios datos.
-*Excepción del equipo:* Aceptamos el uso de Lombok (`@Getter`, `@Builder`) y Jakarta Validation (`@NotNull`) para reducir el código repetitivo, pero NO usamos `@Data` ni `@Setter`.
-
-Ejemplo oficial del equipo:
+## Lo que SI debes hacer (Buenas Practicas)
 
 ```java
-package com.empresa.logistica.gestionusuarios.domain.model;
+public final class Usuario extends EntidadAuditada {
+    private final UsuarioId id;
+    private EstadoCuenta estadoCuenta;
 
-import lombok.Getter;
-import lombok.Builder;
-import lombok.AccessLevel;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import java.util.UUID;
-import java.time.LocalDateTime;
-
-// REGLA: Cero anotaciones de persistencia (@Entity, @Table PROHIBIDAS).
-// SÍ están permitidas las ayudas de Lombok y Validation.
-@Getter
-@Builder(access = AccessLevel.PACKAGE)
-public class Usuario {
-
-    @NotBlank
-    private final String id;
-    
-    @NotBlank
-    private String correo;
-    
-    @NotNull
-    private EstadoUsuario estado;
-    
-    @NotNull
-    private LocalDateTime fechaCreacion;
-
-    public enum EstadoUsuario {
-        PENDIENTE_ACTIVACION, ACTIVO, SUSPENDIDO, DADO_DE_BAJA
+    // 1. Constructor privado
+    private Usuario(UsuarioId id, EstadoCuenta estadoCuenta, LocalDateTime fechaCreacion, ActorAuditoriaId actor) {
+        super(fechaCreacion, actor);
+        this.id = id;
+        this.estadoCuenta = estadoCuenta;
     }
 
-    // Factory Method (Fábrica de Creación Segura)
-    public static Usuario registrarNuevo(String correo) {
-        if (correo == null || correo.isBlank()) {
-            throw new IllegalArgumentException("El correo es obligatorio");
+    // 2. Fabrica explicita para crear un usuario desde cero
+    public static Usuario crear(UsuarioId id, LocalDateTime fechaCreacion, ActorAuditoriaId actor) {
+        if (id == null) throw new IllegalArgumentException("ID nulo");
+        // El estado inicial lo decide el dominio, no la capa de aplicacion
+        return new Usuario(id, EstadoCuenta.ACTIVACION_PENDIENTE, fechaCreacion, actor);
+    }
+
+    // 3. Fabrica explicita para reconstruir la entidad (usada por repositorios)
+    public static Usuario rehidratar(UsuarioId id, EstadoCuenta estadoCuenta, LocalDateTime fechaCreacion, ActorAuditoriaId actor) {
+        return new Usuario(id, estadoCuenta, fechaCreacion, actor);
+    }
+
+    // 4. Operaciones de negocio, no setters
+    public void activar() {
+        if (this.estadoCuenta != EstadoCuenta.ACTIVACION_PENDIENTE) {
+            throw new IllegalStateException("El usuario no esta en estado para ser activado");
         }
-        return Usuario.builder()
-                .id(UUID.randomUUID().toString())
-                .correo(correo)
-                .estado(EstadoUsuario.PENDIENTE_ACTIVACION)
-                .fechaCreacion(LocalDateTime.now())
-                .build();
-    }
-
-    // ----------------------------------------------------------------------
-    // COMPORTAMIENTO DEL NEGOCIO (RICH DOMAIN Y LENGUAJE UBICUO)
-    // ----------------------------------------------------------------------
-
-    public void activarCuenta(String motivo) {
-        if (this.estado == EstadoUsuario.DADO_DE_BAJA) {
-            throw new IllegalStateException("Un usuario dado de baja no puede reactivarse");
-        }
-        this.estado = EstadoUsuario.ACTIVO;
-    }
-
-    public void darDeBaja() {
-        this.estado = EstadoUsuario.DADO_DE_BAJA;
-    }
-
-    public void cambiarCorreo(String nuevoCorreo) {
-        if (this.estado == EstadoUsuario.SUSPENDIDO) {
-            throw new IllegalStateException("Un usuario suspendido no puede cambiar su correo");
-        }
-        this.correo = nuevoCorreo;
+        this.estadoCuenta = EstadoCuenta.ACTIVO;
     }
 }
 ```
 
-## Restricciones Generales
-- Las violaciones de reglas de negocio se manejan arrojando `IllegalStateException` o excepciones personalizadas de `domain/exception`.
-- Jamás se utiliza `@Entity` o de hereda de `Serializable` para mapear bases de datos.
-- **Lenguaje Ubicuo**: Todo método público debe nombrarse con verbos funcionales (`activarCuenta()`), estando totalmente prohibidos los setters clásicos (`setEstado()`) para exponer cambios críticos.
+## Lo que NO debes hacer (Anti-patrones)
+
+- Exponer propiedades de la clase, constructores publicos o mutadores genericos.
+
+```java
+// ESTO ES UN MODELO ANEMICO PROHIBIDO EN ESTE EQUIPO
+public class Usuario {
+    public Long id;
+    public String estado;
+
+    public Usuario() {}
+
+    public void setEstado(String estado) {
+        this.estado = estado; // El dominio no verifica si la transicion es valida
+    }
+}
+```
+
+## Instrucciones Especificas para Agentes IA
+
+- Esta terminantemente prohibido utilizar las anotaciones `@Data`, `@NoArgsConstructor` o `@AllArgsConstructor` de Lombok en el paquete `domain/model`.
+- Si el usuario te pide crear una entidad, debes generar el constructor privado, la fabrica estatica `crear()`, la fabrica estatica `rehidratar()` y los metodos mutadores de estado basados en verbos del negocio.

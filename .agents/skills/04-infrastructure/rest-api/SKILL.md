@@ -1,42 +1,31 @@
 ---
 name: rest-api
-description: Guía oficial para la construcción de Controladores REST como adaptadores de entrada (Extraído del PDF Oficial).
+description: Guia oficial para la construccion de Controladores REST (Input Adapters).
 ---
 
-# Guía de Implementación: Controladores REST
+# Guia de Controladores REST (Input Adapters)
 
-El controlador REST actúa como un **Adaptador de Entrada**. Recibe la solicitud HTTP, la transforma en una intención de aplicación, invoca el puerto de entrada (`UseCase`) y construye la respuesta HTTP.
+**Objetivo:** Implementar adaptadores de entrada (Controladores) que traduzcan el protocolo web (HTTP) hacia las intenciones puras del caso de uso. El controlador es un adaptador tonto que solo escucha, enruta y formatea la salida HTTP.
 
-## 1. Responsabilidades Estrictas
-**El controlador NO DEBE:**
-- Aplicar reglas de negocio.
-- Calcular la vigencia o estado inicial.
-- Consultar directamente a la base de datos o usar repositorios.
-- Depender de la implementación concreta (`CrearUsuarioService`); debe depender de la interfaz (`CrearUsuarioUseCase`).
+## Reglas de Implementacion y Arquitectura
 
-**El controlador SÍ DEBE:**
-- Exponer el endpoint HTTP (ej. `@PostMapping`).
-- Recibir el JSON en un Record (ej. `CrearUsuarioRequest`).
-- Activar validaciones declarativas mediante `@Valid`.
-- Utilizar Mappers (ej. `CrearUsuarioRestMapper`) para convertir a Commands.
-- Devolver un HTTP Status semántico (201, 204, 200).
+1. **Responsabilidad Estricta:** El controlador NO aplica reglas de negocio, no calcula vigencias, no captura reglas de base de datos ni utiliza inyeccion por `@Autowired`.
+2. **Dependencias Correctas:** El controlador SOLO conoce a los Puertos de Entrada (`*UseCase`) y al Mapper (`*RestMapper`). NUNCA depende del Application Service directamente.
+3. **HTTP Semantico:** Las respuestas deben usar codigos estandares (201 Created para creaciones, 204 No Content para eliminaciones/actualizaciones, 200 OK para lecturas).
 
-## 2. Ejemplo de Implementación (UsuarioController)
+## Lo que SI debes hacer (Buenas Practicas)
 
 ```java
-package pe.com.mcalderon.logistica.identidades.gestionusuarios.infrastructure.adapter.in.rest.controller;
-
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-// imports omitidos para brevedad
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/api/usuarios")
 public final class UsuarioController {
 
-    // Depender SIEMPRE de los puertos (UseCase) y NO de los servicios
     private final CrearUsuarioUseCase crearUsuarioUseCase;
     private final CrearUsuarioRestMapper crearUsuarioRestMapper;
 
@@ -44,21 +33,21 @@ public final class UsuarioController {
         CrearUsuarioUseCase crearUsuarioUseCase,
         CrearUsuarioRestMapper crearUsuarioRestMapper
     ) {
-        this.crearUsuarioUseCase = Objects.requireNonNull(crearUsuarioUseCase, "CrearUsuarioUseCase no puede ser nulo");
-        this.crearUsuarioRestMapper = Objects.requireNonNull(crearUsuarioRestMapper, "Mapper no puede ser nulo");
+        this.crearUsuarioUseCase = Objects.requireNonNull(crearUsuarioUseCase, "UseCase nulo");
+        this.crearUsuarioRestMapper = Objects.requireNonNull(crearUsuarioRestMapper, "Mapper nulo");
     }
 
     @PostMapping
     public ResponseEntity<CrearUsuarioResponse> crear(
         @Valid @RequestBody CrearUsuarioRequest request
     ) {
-        // 1. Traducir (Mapper)
+        // 1. Traducir de JSON a Command
         CrearUsuarioCommand command = crearUsuarioRestMapper.aCommand(request);
         
-        // 2. Invocar (UseCase)
+        // 2. Invocar el Caso de Uso (Retorna el Value Object del ID generado)
         UsuarioId usuarioId = crearUsuarioUseCase.crearUsuario(command);
         
-        // 3. Responder (Mapper a Response)
+        // 3. Traducir el resultado al contrato de Salida
         CrearUsuarioResponse response = crearUsuarioRestMapper.aResponse(usuarioId);
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -66,5 +55,11 @@ public final class UsuarioController {
 }
 ```
 
-> [!WARNING] 
-> Durante la creación del controlador, IntelliJ puede mostrar "Could not autowire. No beans of 'CrearUsuarioUseCase' found". **Esto es normal** en esta arquitectura porque la configuración de beans en Spring se ensamblará al final en la carpeta `config`. ¡No modifiques el controlador ni rompas el aislamiento por esta alerta!
+## Lo que NO debes hacer (Anti-patrones)
+
+- Construir validaciones funcionales dentro del metodo `@PostMapping`.
+- Utilizar Entidades del Dominio o Value Objects como parametros de firma del metodo HTTP (`public ResponseEntity crear(@RequestBody CorreoElectronico correo)`). Siempre usa Request/Response DTOs.
+
+## Instrucciones Especificas para Agentes IA
+
+- Si el IDE o las validaciones marcan error sobre _"Could not autowire. No beans of 'XUseCase' found"_, **IGNORALO**. En esta arquitectura es intencional no poner anotaciones `@Service` en el dominio, el ensamblaje de Beans ocurre al final en la clase `Configuration` central. No intentes "reparar" la inyeccion de Spring alterando las clases puras.

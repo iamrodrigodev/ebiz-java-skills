@@ -1,68 +1,30 @@
 ---
 name: application-testing
-description: Guía de pruebas unitarias para Casos de Uso usando FAKES (¡No Mockito!).
+description: Estandar oficial para probar los Casos de Uso (Mocks vs Fakes).
 ---
 
-# Guía de Implementación: Pruebas de Aplicación (Fakes)
+# Guia de Pruebas de Aplicacion (Application Testing)
 
-**DECISIÓN CRÍTICA DE ARQUITECTURA:** En esta arquitectura, **NO se utilizan librerías de Mocking (como Mockito)** para probar la capa de aplicación. En su lugar, se construyen implementaciones **"Fake"** de los puertos de salida en memoria dentro de la misma clase de prueba.
+**Objetivo:** Verificar la correcta orquestacion de reglas y comandos dictaminados por el Caso de Uso (Application Service), comprobando que logre coordinar el flujo llamando a los puertos correctos.
 
-Esto garantiza un comportamiento de prueba más robusto, cercano a la realidad, sin acoplar las pruebas a las llamadas exactas de los métodos internos.
+## Reglas de Implementacion y Arquitectura
 
-## 1. Construcción de Fakes (Simuladores en Memoria)
+1. **NO usar Mocks:** La directiva estricta de la empresa indica evitar librerias de Mocking automáticas (como Mockito).
+2. **Utilizar FAKES en Memoria:** Se construyen implementaciones simuladas (`*PortFake`) dentro de la misma clase del Test, lo cual provee mas flexibilidad y resistencia a refactorizaciones que la fragilidad inherente del espionaje con `verify()` o `when()`.
+3. **Controlar el Tiempo:** Se debe fijar el tiempo durante la ejecucion usando un `Clock.fixed`.
 
-Al final de tu clase de Test (ej. `CrearUsuarioServiceTest`), implementa las interfaces de los Puertos de Salida.
-
-```java
-/*
- * Fake de consulta de personas.
- * sustituye temporalmente al futuro adaptador SQL Server/JPA.
- */
-private static final class ConsultarPersonaPortFake implements ConsultarPersonaPort {
-    private boolean personaExistente = true;
-    private PersonaId personaConsultada;
-
-    @Override
-    public boolean existePersona(PersonaId personaId) {
-        this.personaConsultada = personaId;
-        return personaExistente;
-    }
-
-    void configurarPersonaExistente(boolean personaExistente) {
-        this.personaExistente = personaExistente;
-    }
-}
-
-/*
- * Fake de guardado: captura el Usuario que Application intentó persistir
- */
-private static final class GuardarUsuarioPortFake implements GuardarUsuarioPort {
-    private final UsuarioId usuarioIdGenerado;
-    private Usuario usuarioGuardado;
-
-    private GuardarUsuarioPortFake(UsuarioId usuarioIdGenerado) {
-        this.usuarioIdGenerado = usuarioIdGenerado;
-    }
-
-    @Override
-    public UsuarioId guardar(Usuario usuario) {
-        this.usuarioGuardado = usuario;
-        return usuarioIdGenerado;
-    }
-    
-    Usuario usuarioGuardado() { return usuarioGuardado; }
-}
-```
-
-## 2. Inyección Manual en el Test
-
-Se inyectan los Fakes directamente por el constructor del Application Service, junto con un `Clock.fixed` para controlar el tiempo.
+## Lo que SI debes hacer (Buenas Practicas)
 
 ```java
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 
 class CrearUsuarioServiceTest {
+
+    // 1. Declaramos los simuladores de los puertos externos
     private ConsultarPersonaPortFake consultarPersonaPort;
     private GuardarUsuarioPortFake guardarUsuarioPort;
     private CrearUsuarioService service;
@@ -72,6 +34,7 @@ class CrearUsuarioServiceTest {
         consultarPersonaPort = new ConsultarPersonaPortFake();
         guardarUsuarioPort = new GuardarUsuarioPortFake(new UsuarioId(100L));
         
+        // 2. Inyectamos los fakes en el servicio a testear junto con un Clock congelado
         service = new CrearUsuarioService(
             new ConsultarUsuarioPortFake(),
             guardarUsuarioPort,
@@ -82,22 +45,45 @@ class CrearUsuarioServiceTest {
     }
 
     @Test
-    void debeCrearGuardarYDevolverElIdentificadorDelUsuario() {
-        CrearUsuarioCommand command = crearCommandValido();
+    void debeCrearYGuardarElUsuario() {
+        CrearUsuarioCommand command = crearCommandValido(); // metodo utilitario
         
         UsuarioId resultado = service.crearUsuario(command);
         
         assertEquals(new UsuarioId(100L), resultado);
-        assertNotNull(guardarUsuarioPort.usuarioGuardado());
+        // 3. Afirmamos estado contra la memoria de nuestro fake
         assertTrue(guardarUsuarioPort.usuarioGuardado().estaPendienteDeActivacion());
     }
-    
-    @Test
-    void noDebeGuardarCuandoLaPersonaNoExiste() {
-        consultarPersonaPort.configurarPersonaExistente(false);
+
+    /* ----------------------------------------------------
+     * Construccion del Fake en la misma clase del test
+     * ---------------------------------------------------- */
+    private static final class GuardarUsuarioPortFake implements GuardarUsuarioPort {
+        private final UsuarioId usuarioIdGenerado;
+        private Usuario usuarioGuardado;
+
+        private GuardarUsuarioPortFake(UsuarioId usuarioIdGenerado) {
+            this.usuarioIdGenerado = usuarioIdGenerado;
+        }
+
+        @Override
+        public UsuarioId guardar(Usuario usuario) {
+            this.usuarioGuardado = usuario;
+            return usuarioIdGenerado;
+        }
         
-        assertThrows(PersonaNoExisteException.class, () -> service.crearUsuario(crearCommandValido()));
-        assertNull(guardarUsuarioPort.usuarioGuardado());
+        // Metodo de soporte para poder auditar el resultado interno
+        Usuario usuarioGuardado() { return usuarioGuardado; }
     }
 }
 ```
+
+## Lo que NO debes hacer (Anti-patrones)
+
+- Importar `org.mockito.*` y usar `@Mock` o `@InjectMocks`. Este patron se rechaza activamente en este proyecto.
+- Lanzar test contra Spring Context (anotacion `@SpringBootTest`) aqui. Esta capa se prueba de forma 100% aislada.
+
+## Instrucciones Especificas para Agentes IA
+
+- Siempre que te soliciten probar unitariamente un Caso de Uso, DEBES seguir el patron arquitectonico "Fake". Construye clases `static final` que implementen los Puertos de Salida requeridos.
+- Las variables para simular persistencia en el Fake (ej. `private boolean personaExistente`) deben permitir metodos setters personalizados como `configurarPersonaExistente()` para poder forzar flujos negativos en los tests.

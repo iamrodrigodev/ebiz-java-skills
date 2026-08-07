@@ -1,62 +1,32 @@
 ---
 name: architecture-review
-description: Guía de revisión para auditar un módulo y garantizar que cumple con la Arquitectura Hexagonal y DDD.
+description: Guia de revision arquitectonica para auditorias de codigo.
 ---
 
-# Guía de Revisión de Arquitectura
+# Guia de Revision de Arquitectura
 
-Este documento sirve como manual estricto tanto para desarrolladores del equipo como para agentes de Inteligencia Artificial. Su propósito es definir cómo auditar el código fuente para garantizar que no existan violaciones a los principios de Arquitectura Hexagonal, Clean Architecture y Domain-Driven Design.
+**Objetivo:** Establecer el marco de evaluacion para auditar el cumplimiento estricto de la Arquitectura Hexagonal y los principios de Domain-Driven Design (DDD) durante la revision de codigo, garantizando un acoplamiento nulo del dominio con la infraestructura.
 
-## Instrucciones de Revisión (Paso a Paso)
+## Reglas de Implementacion y Arquitectura
 
-Al revisar un módulo o funcionalidad, se deben ejecutar los siguientes pasos de forma metódica:
+1. **Aislamiento de la Capa de Dominio:** El dominio representa el conocimiento y reglas del negocio puros. No debe tener conocimiento ni dependencias de tecnologias externas (Spring, JPA, bases de datos).
+2. **Dominio Rico:** El modelo de dominio debe expresar acciones y proteger invariantes desde su nacimiento, no solo ser un contenedor de datos (modelo anemico).
+3. **Flujo de Dependencias:** Las dependencias siempre fluyen desde el exterior (Infraestructura) hacia el interior (Dominio). El Dominio no depende de nadie, la Aplicacion depende del Dominio, y la Infraestructura depende de la Aplicacion.
 
-1. **Analizar la Estructura (Vertical Slicing):**
-   - El módulo debe estar dividido obligatoriamente en las carpetas `domain`, `application` e `infrastructure`.
-   - Si falta alguna capa o existen carpetas globales fuera de lugar (ej. un paquete `controllers` en la raíz), debe reportarse como error.
+## Lo que SI debes hacer (Buenas Practicas)
 
-2. **Auditar la Capa de Dominio (`domain`):**
-   - Revisa todos los archivos dentro de `domain/model`, `domain/service`, `domain/exception`.
-   - **Regla Estricta:** Revisa todos los bloques `import`. Está TOTALMENTE PROHIBIDO importar cualquier clase que pertenezca a `org.springframework.*`, `jakarta.persistence.*`, u otros frameworks (con excepción de anotaciones estándar de validación si el equipo lo permite).
-   - **Regla de Dominio Rico:** Verifica que las clases en `model` tengan métodos que reflejen acciones de negocio (ej. `publicar()`, `desactivar()`) y no solo getters/setters anémicos.
+- Crear validaciones de invariantes dentro de los constructores (marcados como private o protected) del modelo de dominio.
+- Importar en la capa de aplicacion unicamente clases de los paquetes `domain` y `application`.
+- Verificar que toda la capa de infraestructura solo interactue con el dominio a traves de los puertos de entrada o salida definidos en la aplicacion.
 
-3. **Auditar la Capa de Aplicación (`application`):**
-   - Revisa las clases en `application/service`.
-   - **Regla Estricta:** Solo pueden importar clases de `application` y `domain`. No pueden importar nada de `infrastructure`.
-   - Verifica que los casos de uso implementen una interfaz (`port.in`) y usen interfaces para comunicarse hacia afuera (`port.out`).
+## Lo que NO debes hacer (Anti-patrones)
 
-4. **Auditar la Capa de infrastructure (`infrastructure`):**
-   - Revisa los controladores en `adapter.in.rest` y repositorios en `adapter.out.persistence`.
-   - Verifica que los controladores llamen a las interfaces de los casos de uso (`port.in`) y no directamente al dominio ni a las bases de datos.
+- Incluir importaciones como `org.springframework.*`, `jakarta.persistence.*`, o `lombok.Data` en los archivos dentro del paquete `domain`.
+- Exponer metodos `setX()` publicos en las entidades de dominio que permitan cambiar el estado sin aplicar la logica de validacion del negocio.
+- Instanciar clases de infraestructura directamente desde los Casos de Uso (Application Services).
 
-## Ejemplos de Estructura Esperada
+## Instrucciones Especificas para Agentes IA
 
-Para dar contexto a los desarrolladores y agentes, esta es la estructura correcta que se debe exigir:
-
-```text
-com.empresa.logistica.gestionusuarios
-├── domain
-│   ├── model       (Entidades puras)
-│   ├── exception   (Errores de negocio)
-│   └── service     (Lógica que cruza varias entidades)
-├── application
-│   ├── port
-│   │   ├── in      (Interfaces de casos de uso)
-│   │   └── out     (Interfaces hacia bases de datos/externos)
-│   ├── command     (DTOs de entrada a los casos de uso)
-│   └── service     (Implementación de port.in)
-└── infrastructure
-    ├── adapter
-    │   ├── in
-    │   │   └── rest             (Spring @RestController)
-    │   └── out
-    │       └── persistence      (Spring @Repository y Entidades JPA)
-    └── config                   (Spring @Configuration)
-```
-
-## Formato de Reporte Esperado
-Tras finalizar la auditoría (ya sea humana o automatizada), se debe generar un reporte que contenga:
-- **Aprobado**: Archivos que cumplen las reglas perfectamente.
-- **Violaciones de Arquitectura**: Lista detallada de archivos, líneas exactas y el motivo por el cual rompen las reglas.
-- **Plan de Refactorización**: Sugerencias de código para solucionar los problemas encontrados.
-
+- Antes de sugerir o aceptar un cambio, debes verificar que el paquete donde estas trabajando tiene permitidas las importaciones de las librerias que vas a usar.
+- Si detectas una entidad de dominio con anotaciones de base de datos (@Table, @Entity), debes refactorizar inmediatamente creando una `JpaEntity` separada en la capa de infraestructura.
+- Esta estrictamente prohibido utilizar expresiones coloquiales o justificar romper el aislamiento "para hacerlo mas rapido".

@@ -1,38 +1,23 @@
 ---
 name: cross-cutting-domain
-description: Guía para aislar dominios transversales como la Auditoría mediante clases abstractas.
+description: Guia de gestion de dominios transversales (Auditoria) a nivel arquitectonico.
 ---
 
-# Guía de Implementación: Dominios Transversales (Auditoría)
+# Guia de Dominios Transversales (Auditoria)
 
-Los datos transversales como auditoría (quién lo creó, cuándo, etc.) no deben contaminar el código puro de la entidad de negocio. La **Decisión de Arquitectura** dicta crear una clase abstracta `EntidadAuditada`.
+**Objetivo:** Establecer el mecanismo arquitectonico para gestionar responsabilidades que cruzan multiples bounded contexts (como la auditoria de modificacion de datos), garantizando consistencia sin acoplar los modulos principales.
 
-## 1. Value Object Transversal
-Primero se crea el tipado fuerte para el actor.
+## Reglas de Implementacion y Arquitectura
 
-```java
-package pe.com.mcalderon.logistica.shared.gestionauditoria.domain.model;
+1. Las reglas transversales de auditoria se controlan mediante herencia en el modelo de dominio.
+2. Todas las entidades de dominio que deban ser auditadas extenderan de la clase abstracta `EntidadAuditada`.
+3. La entidad de auditoria contiene el estado del registro (activo/inactivo logico) y las trazas de tiempo e identidad (`fechaCreacion`, `actorModificacionId`).
+4. Las modificaciones a las fechas y actores de auditoria deben ser invocadas mediante metodos `protected` por la entidad hija antes de completar cualquier operacion de mutacion.
 
-public final class ActorAuditoriaId {
-    private final Long valor;
-    public ActorAuditoriaId(Long valor) {
-        if (valor == null) throw new IllegalArgumentException("El identificador del actor de auditoría no puede ser nulo");
-        if (valor <= 0) throw new IllegalArgumentException("El identificador del actor de auditoría debe ser mayor que cero");
-        this.valor = valor;
-    }
-    public Long valor() { return valor; }
-}
-```
-
-## 2. La Clase Abstracta `EntidadAuditada`
-
-Todas las entidades de negocio que requieran auditoría heredarán de esta clase. Los métodos modificadores de auditoría son `protected` para que solo la entidad hija pueda registrar cambios.
+## Lo que SI debes hacer (Buenas Practicas)
 
 ```java
-package pe.com.mcalderon.logistica.shared.gestionauditoria.domain.model;
-
-import java.time.LocalDateTime;
-
+// Entidad auditada base
 public abstract class EntidadAuditada {
     private boolean estadoRegistro;
     private LocalDateTime fechaCreacion;
@@ -40,37 +25,40 @@ public abstract class EntidadAuditada {
     private LocalDateTime fechaModificacion;
     private ActorAuditoriaId actorModificacionId;
 
-    // Constructor para nacimiento
     protected EntidadAuditada(LocalDateTime fechaCreacion, ActorAuditoriaId actorCreacionId) {
-        if (fechaCreacion == null) throw new IllegalArgumentException("La fecha de creación no puede ser nula");
-        if (actorCreacionId == null) throw new IllegalArgumentException("El actor de creación no puede ser nulo");
+        if (fechaCreacion == null) throw new IllegalArgumentException("La fecha no puede ser nula");
         this.estadoRegistro = true;
         this.fechaCreacion = fechaCreacion;
         this.actorCreacionId = actorCreacionId;
-        this.fechaModificacion = null;
-        this.actorModificacionId = null;
     }
 
-    // Métodos protected para cambiar el estado (Auditoría se valida ANTES del negocio)
-    protected void registrarModificacion(LocalDateTime fechaModificacion, ActorAuditoriaId actorModificacionId) {
-        if (fechaModificacion == null) throw new IllegalArgumentException("La fecha de modificación no puede ser nula");
-        if (actorModificacionId == null) throw new IllegalArgumentException("El actor de modificación no puede ser nulo");
-        if (fechaModificacion.isBefore(fechaCreacion)) {
-            throw new IllegalArgumentException("La fecha de modificación no puede ser anterior a la fecha de creación");
-        }
-        this.fechaModificacion = fechaModificacion;
-        this.actorModificacionId = actorModificacionId;
+    protected void registrarModificacion(LocalDateTime fecha, ActorAuditoriaId actor) {
+        if (fecha == null) throw new IllegalArgumentException("Fecha no puede ser nula");
+        this.fechaModificacion = fecha;
+        this.actorModificacionId = actor;
     }
+}
 
-    protected void eliminarRegistro(LocalDateTime fechaModificacion, ActorAuditoriaId actorModificacionId) {
-        registrarModificacion(fechaModificacion, actorModificacionId);
-        this.estadoRegistro = false;
+// Entidad de negocio hija
+public final class Usuario extends EntidadAuditada {
+    public void darDeBaja(LocalDateTime fechaModificacion, ActorAuditoriaId actor) {
+        if (estaDadoDeBaja()) throw new IllegalStateException("El usuario ya se encuentra dado de baja");
+        
+        // 1. Auditar ANTES de mutar
+        registrarModificacion(fechaModificacion, actor);
+        
+        // 2. Modificar el estado local
+        this.estadoCuenta = EstadoCuenta.BAJA;
     }
-    
-    // Getters públicos para estadoRegistro(), fechaCreacion(), etc.
 }
 ```
 
-## Instrucciones para el Agente
-- La entidad de negocio (ej. `Usuario`) hace `extends EntidadAuditada`.
-- En sus métodos de negocio (`darDeBaja`), el usuario primero llama a `registrarModificacion()` para asegurar la consistencia antes de aplicar su lógica propia.
+## Lo que NO debes hacer (Anti-patrones)
+
+- Declarar `public` los metodos de mutacion de auditoria como `registrarModificacion`, exponiendolos al exterior del agregado de dominio.
+- Crear una clase global `BaseEntity` en la capa de persistencia en lugar del dominio (la auditoria es regla del negocio, no un detalle de base de datos).
+
+## Instrucciones Especificas para Agentes IA
+
+- Siempre que construyas una nueva entidad de dominio principal que requiera trazabilidad, haz que herede de `EntidadAuditada`.
+- Asegurate de que los constructores de inicializacion del dominio soliciten los campos obligatorios de la clase padre (`fechaCreacion`, `actorCreacionId`).

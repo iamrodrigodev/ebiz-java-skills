@@ -1,21 +1,53 @@
 ---
 name: lombok
-description: Guía oficial del equipo sobre cómo y dónde utilizar Lombok en la arquitectura.
+description: Estandar restrictivo para el uso de la libreria Lombok en el proyecto.
 ---
 
-# Guía de Implementación: Lombok
+# Guia de Uso de Lombok
 
-El equipo ha decidido abrazar las ventajas de **Lombok** para reducir el código repetitivo (boilerplate), siempre y cuando no se rompan las reglas del diseño rico (DDD).
+**Objetivo:** Reducir la verbosidad de Java de forma controlada sin comprometer las reglas de proteccion de invariantes ni el diseno del Dominio Rico.
 
-## 1. Uso en la Capa de Dominio (`domain/model`)
-- **Permitido:** `@Getter` (a nivel de clase), `@Builder` (con acceso restringido).
-- **Prohibido:** `@Setter`, `@Data`, `@NoArgsConstructor` y `@AllArgsConstructor`. ¡Un modelo de dominio rico NUNCA expone setters públicos ni depende de constructores inseguros!
-- **Propósito:** Facilitar la creación del objeto (Builder o Constructor) y la lectura de sus atributos, manteniendo el comportamiento encapsulado en verbos de negocio.
+## Reglas de Implementacion y Arquitectura
 
-## 2. Uso en la Capa de Aplicación (`application/command` y `application/dto`)
-- **Permitido:** En los Commands (si se usan clases regulares) se permite `@Data`, `@Value` o `@Builder`. *Nota: Si se usan `record` de Java 14+, Lombok no es necesario aquí.*
+1. **Aislamiento de Mapeo y Creacion:** Lombok NUNCA debe generar constructores vacios o constructores que inicialicen indiscriminadamente todos los campos de una clase de Dominio, ya que puentea la fabrica de inicializacion estricta de la Arquitectura Hexagonal.
+2. Esta estrictamente prohibido el uso de `@Data` en objetos de Dominio. 
+3. Lombok se permite exclusivamente como una herramienta estetica para Getters puntuales u objetos chatos de transferencia.
 
-## 3. Uso en la Capa de Infraestructura (`adapter.out.persistence.entity`)
-- **Permitido:** `@Getter`, `@Setter`, `@Builder`.
-- **Prohibido:** `@Data`, `@EqualsAndHashCode`, `@NoArgsConstructor`, `@AllArgsConstructor`.
-- **Razón:** `@Data` implementa un `hashCode()` que incluye todos los campos. En JPA, si una entidad cambia de estado (ej. un ID auto-generado), su HashCode cambia, lo cual rompe colecciones como `HashSet` o `HashMap` y causa bugs críticos en Hibernate. Adicionalmente, `@AllArgsConstructor` es frágil ante cambios de orden en las propiedades y `@NoArgsConstructor` debe evitarse en favor de constructores manuales `protected` requeridos por JPA.
+## Lo que SI debes hacer (Buenas Practicas)
+
+```java
+import lombok.Getter;
+
+// Solo en DTOs, Commands, y Value Objects simples donde no haya reglas de mutacion
+@Getter
+public class CrearUsuarioCommand {
+    private final Long personaId;
+    private final String correo;
+    
+    // El constructor se sigue escribiendo a mano o delegando estrictamente
+}
+```
+
+## Lo que NO debes hacer (Anti-patrones)
+
+- Usar `@NoArgsConstructor` o `@AllArgsConstructor`. Especialmente critico porque un objeto vacio rompe el modelo DDD al permitir que nazca en estados invalidos.
+- Usar `@Setter` en agregados o clases, induciendo al anti-patron de entidades anemicas.
+
+```java
+// ERROR FATAL DE ARQUITECTURA
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class Usuario {
+    // Si alguien hace 'new Usuario()', todo nace nulo burlando las reglas del negocio.
+}
+```
+
+## Instrucciones Especificas para Agentes IA
+
+- Antes de incluir importaciones de `lombok.*`, asegurate de que la clase no pertenece a `domain/model`. Si pertenece al dominio, no uses Lombok para acortar codigo, escribe el constructor y los getters funcionales a mano de acuerdo a las directrices de inmutabilidad.
+- En capas de Infraestructura o Application, asegurate de nunca incluir `@NoArgsConstructor` para clases que representen Command u objetos inmutables.

@@ -1,60 +1,64 @@
-﻿---
+---
 name: persistence-entities
-description: GuÃ­a oficial del equipo para el uso de Spring Data JPA y el modelado de Entidades de Base de Datos.
+description: Estandar para el diseno y creacion de Entidades JPA (Base de Datos).
 ---
 
-# GuÃ­a de ImplementaciÃ³n: Spring Data JPA (Entidades)
+# Guia de Entidades JPA (Persistence Entities)
 
-Esta guÃ­a define las reglas de persistencia para desarrolladores y agentes de IA. La regla del equipo dicta el uso exclusivo de **Spring Data JPA** para el acceso a datos.
+**Objetivo:** Definir la representacion tecnica utilizada por JPA para almacenar y recuperar informacion en la base de datos (SQL Server), garantizando que estos detalles fisicos no contaminen el Modelo de Dominio.
 
-## Reglas de Mapeo de Entidades JPA
+## Reglas de Implementacion y Arquitectura
 
-Las entidades de base de datos (`@Entity`) viven exclusivamente en la capa de `infrastructure` y sirven Ãºnicamente como un reflejo de las tablas relacionales. **No deben contener lÃ³gica de negocio.**
+1. La Entidad JPA debe representar columnas, claves y restricciones fisicas.
+2. NO debe reutilizarse la Entidad del Dominio puro como entidad JPA. La separacion asegura que el dominio permanezca libre de anotaciones de Hibernate.
+3. El constructor vacio exigido por JPA debe ser declarado como `protected` para evitar su libre instanciacion por desarrolladores de forma incompleta.
+4. Solo se deben usar tipos de datos nativos compatibles con SQL (`Long`, `String`, `Character`), jamas inyectar un Value Object del Dominio directamente en los atributos JPA.
 
-### 1. UbicaciÃ³n y Nomenclatura
-- **Ruta:** `infrastructure/adapter/out/persistence/entity/`
-- **Sufijo:** Se recomienda usar el sufijo `JpaEntity` o `Entity` (ej. `UsuarioJpaEntity`) para evitar colisiones de nombre con el Dominio Rico (`Usuario`).
-
-### 2. Ejemplo de ImplementaciÃ³n (PatrÃ³n Oficial)
+## Lo que SI debes hacer (Buenas Practicas)
 
 ```java
-package com.empresa.logistica.gestionusuarios.infrastructure.adapter.out.persistence.entity;
-
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
 import java.time.LocalDateTime;
 
-// REGLA: Usamos Lombok para evitar boilerplate de getters/setters, pero evitamos @Data
-// porque puede causar problemas de rendimiento con equals() y hashCode() en JPA.
-@Getter
-@Setter
 @Entity
-@Table(name = "usuarios")
+@Table(name = "usuario", schema = "dbo", uniqueConstraints = { 
+    @UniqueConstraint(name = "UQ_Usuario_Correo", columnNames = "Correo") 
+})
 public class UsuarioJpaEntity {
-
-    // JPA requiere un constructor por defecto. Lo creamos manual y protegido, 
-    // cumpliendo la regla de no usar @NoArgsConstructor de Lombok.
-    protected UsuarioJpaEntity() {}
-
+    
     @Id
-    @Column(name = "id_usuario", length = 36, nullable = false)
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "UsuarioId", nullable = false)
+    private Long usuarioId;
+
+    @Column(name = "OrigenCodigo", nullable = false, length = 1)
+    private Character origenCodigo; // Usa primitivos/nativos, NO OrigenUsuario (enum)
     
-    @Column(name = "correo", nullable = false, unique = true, length = 100)
-    private String correo;
-    
-    @Column(name = "estado", nullable = false, length = 30)
-    private String estado;
-    
-    @Column(name = "fecha_creacion", nullable = false, updatable = false)
-    private LocalDateTime fechaCreacion;
+    @Column(name = "FechaModificacion")
+    private LocalDateTime fechaModificacion;
+
+    protected UsuarioJpaEntity() {
+        // Constructor requerido por JPA
+    }
+
+    public UsuarioJpaEntity(Long usuarioId, Character origenCodigo, LocalDateTime fechaModificacion) {
+        this.usuarioId = usuarioId;
+        this.origenCodigo = origenCodigo;
+        this.fechaModificacion = fechaModificacion;
+    }
+
+    // Getters estrictamente necesarios para el mapeo
+    public Long usuarioId() { return usuarioId; }
+    public Character origenCodigo() { return origenCodigo; }
 }
 ```
 
-## Instrucciones para el Agente (LLM)
-- Nunca aÃ±adas lÃ³gica de negocio (validaciones complejas, cÃ¡lculo de estados) dentro de estas entidades. Todo eso pertenece al `Domain Model`.
-- Evita usar la anotaciÃ³n `@Data` de Lombok en entidades JPA. Usa `@Getter` y `@Setter`.
+## Lo que NO debes hacer (Anti-patrones)
 
+- Declarar `public UsuarioJpaEntity() {}` y anadir docenas de constructores sin contexto.
+- Aplicar logica de negocio, condicionales complejos o instanciacion de dependencias en esta clase.
+
+## Instrucciones Especificas para Agentes IA
+
+- Nunca crees `Setters` publicos en las entidades JPA. La inyeccion de valores ocurre solo a traves de constructores llenos generados para ser consumidos por el Mapper.
+- Para nombrar los metodos de acceso (getters), usa el formato de funcion de registro (ej. `nombre()` en lugar de `getNombre()`) si el equipo sigue ese patron de inmutabilidad (como se aprecia en el manual).

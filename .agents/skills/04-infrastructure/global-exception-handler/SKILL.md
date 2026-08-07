@@ -1,40 +1,29 @@
 ---
 name: global-exception-handler
-description: Guía oficial de manejo de errores HTTP y el payload ApiErrorResponse.
+description: Estandar para el manejo centralizado de excepciones y devolucion de errores HTTP.
 ---
 
-# Guía de Implementación: Global Exception Handler
+# Guia de Manejo de Errores (Global Exception Handler)
 
-El manejo centralizado de excepciones traduce los errores de negocio puros (`IllegalStateException`, `RuntimeException` con causas de negocio) a respuestas HTTP correctas (`409 Conflict`, `404 Not Found`).
+**Objetivo:** Prevenir el uso excesivo de bloques `try/catch` en los controladores, delegando la captura de excepciones a un manejador centralizado que traduce los problemas internos a respuestas HTTP seguras y uniformes.
 
-## 1. El Formato de Respuesta (`ApiErrorResponse`)
+## Reglas de Implementacion y Arquitectura
+
+1. El formato de error hacia el exterior debe ocultar trazas de servidor y devolver unicamente informacion comprensible para el cliente, estructurado en un `ApiErrorResponse`.
+2. Las excepciones de validacion de reglas de negocio (`IllegalStateException`, `IllegalArgumentException` o propias de Application) se traducen a codigos HTTP 409 Conflict, 404 Not Found o 400 Bad Request.
+
+## Lo que SI debes hacer (Buenas Practicas)
 
 ```java
-package pe.com.mcalderon.logistica.identidades.gestionusuarios.infrastructure.adapter.in.rest.exception;
-
-import java.time.LocalDateTime;
-
+// 1. El payload inmutable de respuesta
 public record ApiErrorResponse(
     String codigo,
     String mensaje,
     int estadoHttp,
     LocalDateTime fecha
 ) {}
-```
 
-## 2. El Manejador de Spring (`GlobalExceptionHandler`)
-
-```java
-package pe.com.mcalderon.logistica.identidades.gestionusuarios.infrastructure.adapter.in.rest.exception;
-
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RestControllerAdvice;
-import pe.com.mcalderon.logistica.identidades.gestionusuarios.application.exception.CorreoElectronicoYaRegistradoException;
-import pe.com.mcalderon.logistica.identidades.gestionusuarios.application.exception.UsuarioNoExisteException;
-import java.time.LocalDateTime;
-
+// 2. El manejador central
 @RestControllerAdvice
 public final class GlobalExceptionHandler {
 
@@ -44,30 +33,22 @@ public final class GlobalExceptionHandler {
     ) {
         HttpStatus estado = HttpStatus.CONFLICT;
         ApiErrorResponse respuesta = new ApiErrorResponse(
-            "CORREO_ELECTRONICO_YA_REGISTRADO",
+            "CORREO_ELECTRONICO_YA_REGISTRADO", // Codigo leible por frontends
             exception.getMessage(),
             estado.value(),
             LocalDateTime.now()
         );
         return ResponseEntity.status(estado).body(respuesta);
     }
-
-    @ExceptionHandler(UsuarioNoExisteException.class)
-    public ResponseEntity<ApiErrorResponse> manejarUsuarioNoExiste(
-        UsuarioNoExisteException exception
-    ) {
-        ApiErrorResponse respuesta = new ApiErrorResponse(
-            "USUARIO_NO_EXISTE",
-            exception.getMessage(),
-            HttpStatus.NOT_FOUND.value(),
-            LocalDateTime.now()
-        );
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(respuesta);
-    }
 }
 ```
 
-## Reglas de Implementación
-- Todas las excepciones de la aplicación y del dominio se centralizan aquí.
-- Retornar siempre un `ResponseEntity<ApiErrorResponse>`.
-- Asignar a mano el código funcional de error (ej. `"CORREO_ELECTRONICO_YA_REGISTRADO"`).
+## Lo que NO debes hacer (Anti-patrones)
+
+- Devolver excepciones nativas del entorno (como `DataIntegrityViolationException` de SQL) directamente al cliente HTTP. Esto genera vulnerabilidades de seguridad al exponer la tecnologia de base de datos.
+- Usar bloques `try/catch` manuales dentro de los `@RestController` para armar respuestas `ResponseEntity.badRequest()`.
+
+## Instrucciones Especificas para Agentes IA
+
+- Siempre que la aplicacion arroje una excepcion nueva (ej. `PersonaNoExisteException`), debes integrarla a la clase `GlobalExceptionHandler` utilizando `@ExceptionHandler` con el `HttpStatus` mas adecuado.
+- Nunca modifiques el record `ApiErrorResponse` propuesto, este formato es un contrato estricto de la API.

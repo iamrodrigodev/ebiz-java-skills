@@ -1,77 +1,87 @@
 ---
 name: domain-testing
-description: Guía de pruebas unitarias para el dominio (JUnit puro sin Mocks).
+description: Estandar para pruebas puras de Dominio en JUnit 5 usando invariantes.
 ---
 
-# Guía de Implementación: Pruebas de Dominio
+# Guia de Pruebas de Dominio
 
-Las reglas de dominio se prueban con pruebas unitarias aisladas usando **JUnit puro**. Actúan como especificaciones ejecutables. **NO SE USAN MOCKS (Mockito).**
+**Objetivo:** Aislar y probar todas las reglas criticas del negocio utilizando especificaciones y parametrizaciones ejecutables rapidas y confiables (Cero mocks, cero integracion con frameworks tecnologicos).
 
-## 1. Pruebas de Políticas (Parameterized Tests)
+## Reglas de Implementacion y Arquitectura
 
-Las políticas complejas (como calcular vigencia por tipo de cuenta) deben probarse exhaustivamente pasando múltiples parámetros.
+1. Las reglas de Dominio NO pueden instanciar Mocks ni Fakes externos; solamente prueban Objetos de Dominio reales y validan sus cambios de estado internos y excepciones.
+2. Cada rama logica y de invariantes en constructores, objetos de valor y fabricas debe tener un escenario de fallo y uno de exito.
+3. Se prefieren los tests parametrizados (`@ParameterizedTest`) para ejecutar rapidamente amplios espectros de condiciones estaticas.
+
+## Lo que SI debes hacer (Buenas Practicas)
+
+```java
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
+import static org.junit.jupiter.api.Assertions.*;
+
+class CorreoElectronicoTest {
+
+    // 1. Probar fallos de invariantes con fuentes de datos nulas o vacias
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "  "})
+    void noDebePermitirCorreoNuloOVacio(String valor) {
+        assertThrows(IllegalArgumentException.class, () -> new CorreoElectronico(valor));
+    }
+
+    // 2. Probar logica de validacion compleja (Regex) con fuentes de datos erroneas
+    @ParameterizedTest
+    @ValueSource(strings = {"miguel", "miguel@", "@empresa.com", "miguel empresa@empresa.com"})
+    void noDebePermitirFormatosInvalidos(String valor) {
+        assertThrows(IllegalArgumentException.class, () -> new CorreoElectronico(valor));
+    }
+
+    // 3. Probar comportamientos y metodos funcionales
+    @Test
+    void debeNormalizarEspaciosYMayusculas() {
+        CorreoElectronico correo = new CorreoElectronico(" MIGUEL@EMPRESA.COM ");
+        assertEquals("miguel@empresa.com", correo.valor());
+    }
+}
+```
 
 ```java
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import java.util.stream.Stream;
 
-class PoliticaVigenciaUsuarioEstandarTest {
-    private final PoliticaVigenciaUsuario politica = new PoliticaVigenciaUsuarioEstandar();
+class PoliticaVigenciaTest {
 
+    // Uso agresivo de parametros para reglas cruzadas (Ej: Vigencia se calcula segun Origen y Tipo de Cuenta)
     @ParameterizedTest
     @MethodSource("casosDeVigencia")
-    void debeCalcularLaVigenciaSegunOrigenYTipoDeCuenta(OrigenUsuario origenUsuario, TipoCuenta tipoCuenta, int duracionDias) {
-        LocalDate fechaInicio = LocalDate.of(2026, 1, 1);
-        PeriodoVigencia periodo = politica.calcular(fechaInicio, origenUsuario, tipoCuenta);
+    void probarPeriodosSegunVariables(OrigenUsuario origen, TipoCuenta tipo, int duracionEsperada) {
+        LocalDate inicio = LocalDate.of(2026, 1, 1);
+        PeriodoVigencia periodo = politica.calcular(inicio, origen, tipo);
         
-        LocalDate fechaFinEsperada = fechaInicio.plusDays(duracionDias - 1L);
-        assertEquals(fechaFinEsperada, periodo.fechaFin());
+        LocalDate esperado = inicio.plusDays(duracionEsperada - 1L);
+        assertEquals(esperado, periodo.fechaFin());
     }
 
     private static Stream<Arguments> casosDeVigencia() {
         return Stream.of(
             Arguments.of(OrigenUsuario.INTERNO, TipoCuenta.PERSONAL, 365),
-            Arguments.of(OrigenUsuario.EXTERNO, TipoCuenta.PERSONAL, 90)
-            // ... otras combinaciones
+            Arguments.of(OrigenUsuario.EXTERNO, TipoCuenta.ADMINISTRACION, 10)
         );
     }
 }
 ```
 
-## 2. Pruebas de Value Objects (Invariantes Locales)
+## Lo que NO debes hacer (Anti-patrones)
 
-Validar que el Value Object proteja su propia verdad local.
+- Ejecutar las pruebas usando frameworks como `@SpringBootTest`, reduciendo enormemente la velocidad del set de pruebas.
+- Omitir mensajes claros en los metodos (nombramiento opaco como `test1()`).
 
-```java
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
-import org.junit.jupiter.params.provider.ValueSource;
+## Instrucciones Especificas para Agentes IA
 
-class CorreoElectronicoTest {
-    @ParameterizedTest
-    @ValueSource(strings = {"miguel", "miguel@", "@empresa.com"})
-    void noDebePermitirFormatosInvalidos(String valor) {
-        assertThrows(IllegalArgumentException.class, () -> new CorreoElectronico(valor));
-    }
-}
-```
-
-## 3. Pruebas de Comportamiento de Entidades
-
-Llamar a los métodos de dominio verificando la modificación de estados (incluyendo la auditoría).
-
-```java
-@Test
-void debeEliminarLogicamenteAlUsuario() {
-    Usuario usuario = crearUsuarioPersonalInterno(); // Método de utilidad privado
-    LocalDateTime fechaEliminacion = LocalDateTime.of(2026, 7, 31, 9, 15);
-    ActorAuditoriaId actorEliminacionId = new ActorAuditoriaId(2L);
-    
-    usuario.eliminarLogicamente(fechaEliminacion, actorEliminacionId);
-    
-    assertTrue(usuario.estaEliminadoLogicamente());
-    assertFalse(usuario.estaRegistrado());
-}
-```
+- Siempre que te pidan escribir pruebas para el DOMINIO puro, apalancate intensamente en los atributos `@ParameterizedTest` junto con `@ValueSource` o `@MethodSource` de JUnit 5.
+- La nomenclatura estandar a seguir debe ser `debe[HacerAlgo]()` o `noDebe[HacerAlgo]()` (Ej: `noDebePermitirCorreoNulo()`).

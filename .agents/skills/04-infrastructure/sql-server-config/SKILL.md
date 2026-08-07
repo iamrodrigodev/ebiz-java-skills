@@ -1,13 +1,22 @@
 ---
 name: sql-server-config
-description: Guía oficial de configuración para SQL Server, JPA Entity y Flyway.
+description: Estandar de configuracion, propiedades y migraciones para SQL Server.
 ---
 
-# Guía de Configuración: SQL Server
+# Guia de Configuracion de SQL Server
 
-## 1. Configuración de `application.properties`
+**Objetivo:** Documentar la configuracion exacta requerida para establecer la conexion con Microsoft SQL Server e imponer directivas strictly sobre el uso del dialecto de Hibernate y DDL.
+
+## Reglas de Implementacion y Arquitectura
+
+1. Hibernate NUNCA debe ejecutar sentencias de `update` o `create` a nivel DDL contra SQL Server en un flujo productivo.
+2. Todas las tablas, llaves primarias, identificadores incrementales (`IDENTITY`) y llaves unicas se crean a traves de scripts versionados (Flyway/Liquibase) en recursos fisicos (`.sql`).
+
+## Lo que SI debes hacer (Buenas Practicas)
 
 ```properties
+# ARCHIVO: src/main/resources/application.properties
+
 spring.application.name=logistica
 
 spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=LogisticaDB;encrypt=true;trustServerCertificate=true
@@ -15,7 +24,7 @@ spring.datasource.username=logistica_app
 spring.datasource.password=logistica_app
 spring.datasource.driver-class-name=com.microsoft.sqlserver.jdbc.SQLServerDriver
 
-# Hibernate NUNCA debe hacer update en produccion, solo validate
+# Hibernate NUNCA actualiza, solo valida la paridad de columnas
 spring.jpa.hibernate.ddl-auto=validate
 spring.jpa.hibernate.naming.physical-strategy=org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
 
@@ -24,10 +33,8 @@ spring.jpa.properties.hibernate.format_sql=true
 spring.jpa.show-sql=true
 ```
 
-## 2. Creación Física con Migraciones SQL
-Los scripts de creación deben vivir versionados (ej. `V001__crear_tablas.sql` en `src/main/resources/db/migration`).
-
 ```sql
+-- ARCHIVO: src/main/resources/db/migration/V001__crear_tablas.sql
 CREATE TABLE dbo.usuario (
     UsuarioId BIGINT IDENTITY(1,1) NOT NULL,
     PersonaId BIGINT NULL,
@@ -35,45 +42,19 @@ CREATE TABLE dbo.usuario (
     Correo NVARCHAR(320) NOT NULL,
     OrigenCodigo CHAR(1) NOT NULL,
     TipoCuentaCodigo CHAR(1) NOT NULL,
-    EstadoCuentaCodigo INT NOT NULL,
     FechaInicioVigencia DATE NOT NULL,
-    FechaFinVigencia DATE NOT NULL,
     EstadoRegistro BIT NOT NULL,
-    FechaCreacion DATETIME2(7) NOT NULL,
-    ActorCreacionId BIGINT NOT NULL,
-    FechaModificacion DATETIME2(7) NULL,
-    ActorModificacionId BIGINT NULL,
     CONSTRAINT PK_Usuario PRIMARY KEY (UsuarioId),
     CONSTRAINT UQ_Usuario_Correo UNIQUE (Correo)
 );
 GO
 ```
 
-## 3. Mapeo de Entidad JPA (Infrastructure)
-La `JpaEntity` usa los tipos simples correspondientes a las columnas (no usa Value Objects) y aplica constructores `protected`.
+## Lo que NO debes hacer (Anti-patrones)
 
-```java
-@Entity
-@Table(
-    name = "usuario",
-    schema = "dbo",
-    uniqueConstraints = { @UniqueConstraint(name = "UQ_Usuario_Correo", columnNames = "Correo") }
-)
-public class UsuarioJpaEntity {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "UsuarioId", nullable = false)
-    private Long usuarioId;
+- Confiar en `spring.jpa.hibernate.ddl-auto=update` para que resuelva migraciones estructurales, exponiendo asi el esquema fisico al azar y a bugs de sincronizacion.
 
-    @Column(name = "Nombre", nullable = false, length = 200)
-    private String nombre;
+## Instrucciones Especificas para Agentes IA
 
-    @Column(name = "OrigenCodigo", nullable = false, length = 1)
-    private Character origenCodigo;
-
-    protected UsuarioJpaEntity() {} // Constructor requerido por JPA
-    
-    // Constructores con parámetros y Getters manuales. 
-    // PROHIBIDO USAR Setters genéricos públicos si los constructores ya hacen el trabajo.
-}
-```
+- Siempre que te pidan conectarte a base de datos en este proyecto, asume el uso del Driver de SQL Server y su cadena de conexion especifica, no uses MySQL ni PostgreSQL.
+- Cuando generes codigo de base de datos, asegurate de proveer el script SQL tradicional de MS SQL (usando la palabra clave `GO` y sintaxis como `IDENTITY(1,1)`).

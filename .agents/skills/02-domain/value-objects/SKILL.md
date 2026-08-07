@@ -1,24 +1,23 @@
 ---
 name: value-objects
-description: Guía oficial para la creación de Value Objects y Enums del Dominio (Extraído del PDF Oficial).
+description: Guia de implementacion de Value Objects y Enums del Dominio.
 ---
 
-# Guía de Implementación: Value Objects
+# Guia de Objetos de Valor (Value Objects)
 
-En la Arquitectura Hexagonal y DDD, no todo debe ser una Entidad. Los **Value Objects** (Objetos de Valor) son cruciales para el tipado fuerte y la validación intrínseca en su punto de verdad local.
+**Objetivo:** Erradicar la "obsesion por los primitivos" en el dominio implementando objetos inmutables que encapsulen la semantica del negocio, protegiendo la validez intrinseca de la data (el "punto de verdad local").
 
-## 1. Value Objects de Tipado Fuerte
+## Reglas de Implementacion y Arquitectura
 
-Evitamos usar tipos primitivos genéricos (`String`, `Long`). Creamos records o clases finales.
+1. **Tipado Fuerte:** Evitar variables genericas (`String correo`, `Long id`). En su lugar, se utilizan Value Objects (`CorreoElectronico`, `UsuarioId`).
+2. **Verdad Local:** El Value Object es el unico lugar donde se valida el formato intrinseco (ej. Expresion Regular para el correo).
+3. **Inmutabilidad Estricta:** Un Value Object no tiene ciclo de vida. Si su contenido varia, se crea un objeto nuevo.
+4. **Dominio Cerrado (Enums):** Para catálogos o clasificaciones estáticas con un universo cerrado de valores, se utilizan `enum` garantizando las conversiones desde codigo de sistema (ej. Base de Datos o DTO).
 
-### Ejemplo: `CorreoElectronico` (Con Validación Regex)
+## Lo que SI debes hacer (Buenas Practicas)
+
 ```java
-package pe.com.mcalderon.logistica.identidades.gestionusuarios.domain.model;
-
-import java.util.Locale;
-import java.util.Objects;
-import java.util.regex.Pattern;
-
+// Implementacion estricta y profesional de un Value Object
 public final class CorreoElectronico {
     private static final Pattern FORMATO_VALIDO = 
         Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
@@ -27,66 +26,57 @@ public final class CorreoElectronico {
 
     public CorreoElectronico(String valor) {
         if (valor == null) {
-            throw new IllegalArgumentException("El correo electrónico no puede ser nulo");
+            throw new IllegalArgumentException("El correo electronico no puede ser nulo");
         }
         String valorNormalizado = valor.trim().toLowerCase(Locale.ROOT);
         if (valorNormalizado.isBlank()) {
-            throw new IllegalArgumentException("El correo electrónico no puede estar vacío");
+            throw new IllegalArgumentException("El correo electronico no puede estar vacio");
         }
         if (!FORMATO_VALIDO.matcher(valorNormalizado).matches()) {
-            throw new IllegalArgumentException("El correo electrónico no tiene un formato válido");
+            throw new IllegalArgumentException("El correo electronico no tiene un formato valido");
         }
         this.valor = valorNormalizado;
     }
 
     public String valor() { return valor; }
-    // Implementar equals y hashCode
+    
+    @Override
+    public boolean equals(Object objeto) {
+        if (this == objeto) return true;
+        if (!(objeto instanceof CorreoElectronico correoElectronico)) return false;
+        return Objects.equals(valor, correoElectronico.valor);
+    }
+    
+    @Override
+    public int hashCode() { return Objects.hash(valor); }
 }
 ```
 
-### Ejemplo: `PeriodoVigencia` (Con validación compuesta)
 ```java
-public final class PeriodoVigencia {
-    private final LocalDate fechaInicio;
-    private final LocalDate fechaFin;
-
-    public PeriodoVigencia(LocalDate fechaInicio, LocalDate fechaFin) {
-        if (fechaInicio == null) throw new IllegalArgumentException("La fecha de inicio de vigencia no puede ser nula");
-        if (fechaFin == null) throw new IllegalArgumentException("La fecha de fin de vigencia no puede ser nula");
-        if (fechaFin.isBefore(fechaInicio)) {
-            throw new IllegalArgumentException("La fecha de fin de vigencia no puede ser anterior a la fecha de inicio");
-        }
-        this.fechaInicio = fechaInicio;
-        this.fechaFin = fechaFin;
-    }
-
-    public boolean estaVigente(LocalDate fechaEvaluacion) {
-        if (fechaEvaluacion == null) throw new IllegalArgumentException("La fecha de evaluación no puede ser nula");
-        return !fechaEvaluacion.isBefore(fechaInicio) && !fechaEvaluacion.isAfter(fechaFin);
-    }
-}
-```
-
-## 2. Enumeraciones del Dominio (Enums)
-
-Al tener un universo cerrado de estados u orígenes, se usa Enum. **Decisión de Arquitectura:** Las reglas se aplican como configuración de la aplicación sin requerir acceso a BD.
-
-### Ejemplo: `OrigenUsuario`
-```java
-public enum OrigenUsuario {
-    INTERNO('I'), EXTERNO('E');
+// Implementacion de Enums con conversiones seguras
+public enum TipoCuenta {
+    PERSONAL('P'), SERVICIO('S');
 
     private final char codigo;
-    OrigenUsuario(char codigo) { this.codigo = codigo; }
+    TipoCuenta(char codigo) { this.codigo = codigo; }
     public char codigo() { return codigo; }
 
-    public static OrigenUsuario desdeCodigo(char codigo) {
+    public static TipoCuenta desdeCodigo(char codigo) {
         char codigoNormalizado = Character.toUpperCase(codigo);
-        for (OrigenUsuario origen : values()) {
-            if (origen.codigo == codigoNormalizado) return origen;
+        for (TipoCuenta tipo : values()) {
+            if (tipo.codigo == codigoNormalizado) return tipo;
         }
-        throw new IllegalArgumentException("Código de origen de usuario no válido: " + codigo);
+        throw new IllegalArgumentException("Codigo de tipo de cuenta no valido: " + codigo);
     }
 }
 ```
-*(Se aplica el mismo patrón para `TipoCuenta` y `EstadoCuenta`)*.
+
+## Lo que NO debes hacer (Anti-patrones)
+
+- Utilizar el Value Object para ejecutar validaciones contra base de datos (ej. `correoElectronico.existeEnBd()`). El Value Object ignora por completo su entorno.
+- Validar expresiones regulares de dominio en los Controladores o en los Casos de Uso. El conocimiento pertenece al objeto local.
+
+## Instrucciones Especificas para Agentes IA
+
+- Siempre que se identifiquen identificadores (`id`) se debe crear su Value Object representativo (`UsuarioId`, `PersonaId`).
+- Todos los Value Objects deben sobrescribir los metodos `equals` y `hashCode` para asegurar la igualdad por valor, asi como el metodo `toString()`.

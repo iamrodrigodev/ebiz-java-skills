@@ -1,100 +1,60 @@
-﻿---
+---
 name: persistence-adapters
-description: Instrucciones para el agente sobre cómo generar Adaptadores (REST/Persistencia) en infrastructure con ejemplos de código.
+description: Guia de implementacion de Adaptadores de Persistencia para SQL Server.
 ---
 
-# Rol y Objetivo
-Eres un Desarrollador Experto en Spring Boot. Tu objetivo es conectar los Puertos limpios de la Aplicación con el mundo real (Bases de Datos, APIs REST), creando código en la capa `infrastructure`. Aquí SÍ está permitido y es obligatorio el uso de frameworks.
+# Guia de Adaptadores de Persistencia
 
-# Instrucciones de Implementación
+**Objetivo:** Los Adaptadores materializan los Puertos de Salida definidos por la capa de aplicacion, interactuando de forma concreta con los repositorios Spring Data JPA y mapeando entidades fisicas hacia/desde el dominio.
 
-Al recibir la orden de crear adaptadores, generarás el Controlador REST (`adapter.in.rest`) y/o el Repositorio JPA (`adapter.out.persistence`).
+## Reglas de Implementacion y Arquitectura
 
-# Ejemplos de Código (Patrón a seguir)
+1. Un unico Adaptador puede implementar multiples Puertos de Salida pequemos relacionados (Interface Segregation Principle).
+2. El Adaptador tiene como unica responsabilidad orquestar repositorios tecnicos (`JpaRepository`) y herramientas de traduccion (`Mapper`).
+3. El Adaptador jamas debe tener reglas de negocio ni alterar el estado interno de la Entidad de Dominio.
 
-## 1. Adaptador de Entrada (Controlador REST)
-Ubicación: `infrastructure/adapter/in/rest/UsuarioController.java`
-
-```java
-package com.empresa.logistica.gestionusuarios.infrastructure.adapter.in.rest;
-
-import com.empresa.logistica.gestionusuarios.application.port.in.ActivarUsuarioUseCase;
-import com.empresa.logistica.gestionusuarios.application.command.ActivarUsuarioCommand;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-@RestController
-@RequestMapping("/api/v1/usuarios")
-public class UsuarioController {
-
-    private final ActivarUsuarioUseCase activarUsuarioUseCase;
-
-    // Se inyecta la interfaz del caso de uso (Puerto In)
-    public UsuarioController(ActivarUsuarioUseCase activarUsuarioUseCase) {
-        this.activarUsuarioUseCase = activarUsuarioUseCase;
-    }
-
-    @PostMapping("/{id}/activar")
-    public ResponseEntity<Void> activarUsuario(
-            @PathVariable("id") String id, 
-            @RequestBody ActivarUsuarioRequest request) { // Request web específico
-        
-        // Mapear request web al Command de la aplicación
-        ActivarUsuarioCommand command = new ActivarUsuarioCommand(id, request.motivo());
-        
-        // Ejecutar caso de uso
-        activarUsuarioUseCase.execute(command);
-        
-        return ResponseEntity.ok().build();
-    }
-}
-```
-
-## 2. Adaptador de Salida (Persistencia JPA)
-Ubicación: `infrastructure/adapter/out/persistence/UsuarioPersistenceAdapter.java`
-
-Este adaptador implementa el `Port Out` y usa un repositorio interno de Spring Data JPA.
+## Lo que SI debes hacer (Buenas Practicas)
 
 ```java
-package com.empresa.logistica.gestionusuarios.infrastructure.adapter.out.persistence;
-
-import com.empresa.logistica.gestionusuarios.application.port.out.UsuarioRepositoryPort;
-import com.empresa.logistica.gestionusuarios.domain.model.Usuario;
-import org.springframework.stereotype.Repository;
+import java.util.Objects;
 import java.util.Optional;
 
-@Repository
-public class UsuarioPersistenceAdapter implements UsuarioRepositoryPort {
+// El adaptador implementa todos los puertos de salida relacionados al Usuario
+public final class UsuarioPersistenceAdapter implements GuardarUsuarioPort, ConsultarUsuarioPorIdPort {
 
-    private final SpringDataUsuarioRepository jpaRepository; // La interfaz que extiende JpaRepository
-    private final UsuarioEntityMapper mapper; // Clase para mapear de Dominio a JPA y viceversa
+    private final UsuarioJpaRepository repository;
+    private final UsuarioPersistenceMapper mapper;
 
-    public UsuarioPersistenceAdapter(SpringDataUsuarioRepository jpaRepository, UsuarioEntityMapper mapper) {
-        this.jpaRepository = jpaRepository;
-        this.mapper = mapper;
+    public UsuarioPersistenceAdapter(UsuarioJpaRepository repository, UsuarioPersistenceMapper mapper) {
+        this.repository = Objects.requireNonNull(repository, "Repositorio no puede ser nulo");
+        this.mapper = Objects.requireNonNull(mapper, "Mapper no puede ser nulo");
     }
 
     @Override
-    public Optional<Usuario> findById(String id) {
-        return jpaRepository.findById(id)
-                .map(mapper::toDomain); // Convertir UsuarioJpaEntity a Usuario (Domain)
+    public UsuarioId guardar(Usuario usuario) {
+        Objects.requireNonNull(usuario, "Usuario no puede ser nulo");
+        
+        UsuarioJpaEntity entity = mapper.aJpaEntity(usuario);
+        UsuarioJpaEntity entityGuardada = repository.save(entity);
+        
+        return new UsuarioId(entityGuardada.usuarioId());
     }
 
     @Override
-    public void save(Usuario usuario) {
-        UsuarioJpaEntity entity = mapper.toJpaEntity(usuario);
-        jpaRepository.save(entity);
-    }
-    
-    @Override
-    public boolean existsByCorreo(String correo) {
-        return jpaRepository.existsByCorreo(correo);
+    public Optional<Usuario> cargarPorId(UsuarioId usuarioId) {
+        Objects.requireNonNull(usuarioId, "UsuarioId no puede ser nulo");
+        
+        return repository.findById(usuarioId.valor()).map(mapper::aDominio);
     }
 }
 ```
 
-# Restricciones Finales
-Al generar este código, el agente debe:
-- No devolver Entidades de dominio directamente en los controladores REST. Si hay que devolver datos, se debe mapear la Entidad a un DTO de respuesta (ej. `UsuarioResponse`).
-- Mantener la separación estricta: La base de datos guarda `UsuarioJpaEntity` (con anotaciones `@Entity`, `@Table`), pero el adaptador lo mapea y le entrega al caso de uso un objeto `Usuario` (modelo puro de dominio).
+## Lo que NO debes hacer (Anti-patrones)
 
+- Colocar `@Component` o `@Repository` en el Adaptador; al igual que los Application Services, la instanciacion de los adaptadores se inyecta via constructores en las clases `@Configuration`.
+- Intentar parsear las fechas o aplicar condiciones de vigencia dentro de `guardar()` o `cargarPorId()`.
+
+## Instrucciones Especificas para Agentes IA
+
+- Siempre que crees un adaptador, inyecta su `JpaRepository` correspondiente y el `Mapper` para traducir entre entidades del Dominio y `JpaEntity`.
+- Usa siempre `Objects.requireNonNull()` para proteger las variables del adaptador.

@@ -1,27 +1,25 @@
 ---
 name: rest-mappers
-description: Guía oficial de mapeo manual en REST usando Objects.requireNonNull.
+description: Guia de traduccion manual entre el Dominio y el Protocolo REST.
 ---
 
-# Guía de Implementación: REST Mappers
+# Guia de Mappers REST
 
-Los mappers actúan como mecanismo de transformación técnica aislando el Dominio del protocolo HTTP y evitando exponer accidentalmente atributos (principio de mínima exposición). 
+**Objetivo:** Implementar traductores que garanticen el aislamiento de los Casos de Uso. Su trabajo es asegurar que el JSON que ingresa se convierta estrictamente en el `Command` inmutable de Java, y que la respuesta de Dominio pase a un `Response` para JSON.
 
-**DECISIÓN DE ARQUITECTURA:** Se realiza el mapeo MANUALMENTE, sin depender de librerías automáticas, para garantizar un control estricto y la inmutabilidad.
+## Reglas de Implementacion y Arquitectura
 
-## Ejemplo de Implementación Exacta
+1. **Rechazo a librerias magicas:** Segun el PDF arquitectonico base del equipo, estos mapeos se realizan manualmente en clases final, sin usar frameworks automaticos (como MapStruct) para evitar ocultar magia negra.
+2. **Principio de minima exposicion:** El Request recibe unicamente lo que necesita del cliente, y el Response devuelve unicamente la porcion de la data no-sensible.
+
+## Lo que SI debes hacer (Buenas Practicas)
 
 ```java
-package pe.com.mcalderon.logistica.identidades.gestionusuario.infrastructure.adapter.in.rest.mapper;
-
-import pe.com.mcalderon.logistica.identidades.gestionusuarios.application.command.CrearUsuarioCommand;
-import pe.com.mcalderon.logistica.identidades.gestionusuarios.domain.model.UsuarioId;
-import pe.com.mcalderon.logistica.identidades.gestionusuarios.infrastructure.adapter.in.rest.request.CrearUsuarioRequest;
-import pe.com.mcalderon.logistica.identidades.gestionusuarios.infrastructure.adapter.in.rest.response.CrearUsuarioResponse;
 import java.util.Objects;
 
 public final class CrearUsuarioRestMapper {
     
+    // Request (Entrada web) -> Command (Objeto interno de app)
     public CrearUsuarioCommand aCommand(CrearUsuarioRequest request) {
         Objects.requireNonNull(request, "CrearUsuarioRequest no puede ser nulo");
         
@@ -36,6 +34,7 @@ public final class CrearUsuarioRestMapper {
         );
     }
     
+    // ID del Dominio puro -> Response (Salida Web)
     public CrearUsuarioResponse aResponse(UsuarioId usuarioId) {
         Objects.requireNonNull(usuarioId, "UsuarioId no puede ser nulo");
         return new CrearUsuarioResponse(usuarioId.valor());
@@ -43,7 +42,12 @@ public final class CrearUsuarioRestMapper {
 }
 ```
 
-## Reglas Clave
-- Usar `Objects.requireNonNull` en las entradas del mapper.
-- La clase mapper debe ser `final`.
-- El controlador simplemente delega la conversión a esta clase antes de llamar al UseCase.
+## Lo que NO debes hacer (Anti-patrones)
+
+- Retornar campos confidenciales (como contraseñas, tokens crudos o data auditoria innecesaria) mapeados por defecto en las respuestas HTTP.
+- Anadir operaciones logicas u operaciones matematicas adentro de los metodos de mapeo.
+
+## Instrucciones Especificas para Agentes IA
+
+- Crea Mappers manuales usando la palabra reservada `final class`.
+- Incorpora siempre el uso intensivo de `Objects.requireNonNull()` para validar la sanidad del DTO de entrada antes de generar el comando.

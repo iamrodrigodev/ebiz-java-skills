@@ -1,44 +1,45 @@
-﻿---
+---
 name: ports
-description: Guía y ejemplos de código sobre cómo generar Puertos de entrada y salida (In/Out).
+description: Guia de diseno y separacion de Puertos de Entrada y Salida.
 ---
 
-# Guía de Implementación: Puertos (Interfaces)
+# Guia de Puertos (Input/Output Ports)
 
-## Reglas de Implementación
+**Objetivo:** Los puertos definen los contratos mediante los cuales la aplicacion interactua con el mundo exterior. Los Puertos de Entrada definen "que puede pedirle el mundo a mi aplicacion", mientras que los Puertos de Salida definen "que necesita mi aplicacion del mundo".
 
-### 1. Puerto de Entrada (`application/port/in/ActivarUsuarioUseCase.java`)
-Es un contrato puro de Java. Define lo que el sistema **ofrece** al exterior. Es llamado por los controladores (adapter.in) y ejecutado por los Casos de Uso.
+## Reglas de Implementacion y Arquitectura
+
+1. Los puertos de entrada y salida no se conocen entre si; el unico punto de union es el Caso de Uso (Application Service).
+2. Los puertos de salida se disenan desde las necesidades del caso de uso, no desde la estructura de la base de datos (no son simples repositorios CRUD).
+3. Una misma implementacion tecnica (Adaptador) puede satisfacer multiples puertos pequenos (Interface Segregation Principle).
+
+## Lo que SI debes hacer (Buenas Practicas)
 
 ```java
-package com.empresa.logistica.gestionusuarios.application.port.in;
+// Puerto de Entrada: Define el contrato hacia el Controlador REST
+public interface ConsultarUsuarioUseCase {
+    ConsultarUsuarioResult consultarUsuario(UsuarioId usuarioId);
+}
 
-import com.empresa.logistica.gestionusuarios.application.command.ActivarUsuarioCommand;
-
-public interface ActivarUsuarioUseCase {
-    void execute(ActivarUsuarioCommand command);
+// Puerto de Salida: Define una capacidad externa especifica
+public interface ConsultarOtroUsuarioConCorreoPort {
+    boolean existeOtroUsuarioConCorreo(CorreoElectronico correo, UsuarioId usuarioIdExcluido);
 }
 ```
 
-### 2. Puerto de Salida (`application/port/out` o `infrastructure/adapter/out`)
-**EXCEPCIÓN DEL EQUIPO (LEY JPA):** A diferencia de la Arquitectura Hexagonal estricta (donde los puertos out son interfaces puras), en este proyecto hemos acordado utilizar directamente **`JpaRepository`**. 
-
-Por lo tanto, en lugar de crear una interfaz pura y luego un adaptador que la implemente, crearemos directamente la interfaz JPA en la capa correspondiente (usualmente tratada como el puerto de salida).
+## Lo que NO debes hacer (Anti-patrones)
 
 ```java
-package com.empresa.logistica.gestionusuarios.infrastructure.adapter.out.persistence;
-
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
-
-// REGLA DEL EQUIPO: Usamos directamente JpaRepository en lugar de interfaces puras de Java
-@Repository
-public interface UsuarioRepository extends JpaRepository<UsuarioJpaEntity, String> {
-    boolean existsByCorreo(String correo);
+// ERROR: Diseno de puerto basado en tabla de datos (CRUD), rompe el concepto de "Capacidad"
+public interface UsuarioRepositoryPort {
+    void save(Usuario u);
+    Usuario findById(Long id);
+    void delete(Usuario u);
+    List<Usuario> findAll();
 }
 ```
 
-## Restricciones Finales
-Al programar puertos de salida:
-- **No** crees interfaces de Java puro que luego envuelvas con adaptadores complejos, a menos que sea un cliente HTTP externo. Para base de datos, usa Spring Data JPA directamente.
+## Instrucciones Especificas para Agentes IA
 
+- Siempre que crees un puerto de salida, debes nombrarlo describiendo la accion especifica que realiza (ej. `CargarUsuarioPorIdPort`, `GuardarUsuarioPort`), terminando con el sufijo `Port`.
+- Nunca agrupes todas las operaciones de persistencia en una unica interfaz gigantesca. Aplica segregacion de interfaces (ISP).
